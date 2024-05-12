@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -58,13 +57,10 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
 	stop := make(chan struct{})
 	ret = make(chan ReCh)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	//read
+	// read
 	go func() {
 		defer func() {
 			conn.Close()
-			wg.Done()
 		}()
 		conn.SetPongHandler(func(string) error {
 			return nil
@@ -98,13 +94,11 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
 
 	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"tm.event='NewBlock'"}}`))
 	// write
-	wg.Add(1)
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer func() {
 			ticker.Stop()
 			conn.Close()
-			wg.Done()
 		}()
 
 		for {
@@ -125,6 +119,5 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
 			}
 		}
 	}()
-	wg.Wait()
 	return
 }

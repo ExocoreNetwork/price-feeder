@@ -2,3 +2,11 @@ sources:
   - chainlink
 tokens:
   - ETHUSDT
+exocore:
+  keypath: /Users/linqing/.tmp-exocored
+  chainid: exocoretestnet_233-1
+  appName: exocore
+  rpc: 127.0.0.1:9090
+  ws: 
+    addr: !!str ws://127.0.0.1:26657
+    endpoint: /websocket

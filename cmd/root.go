@@ -17,6 +17,16 @@ var Conf Config
 type Config struct {
 	Sources []string `mapstructure:"sources"`
 	Tokens  []string `mapstructure:"tokens"`
+	Exocore struct {
+		Keypath string `mapstructure:"keypath"`
+		ChainID string `mapstructure:"chainid"`
+		AppName string `mapstructure:"appname"`
+		Rpc     string `mapstructure:"rpc:"`
+		Ws      struct {
+			Addr     string `mapstructure:"addr"`
+			Endpoint string `mapstructure:"endpoint"`
+		} `mapstructure:"ws"`
+	} `mapstructure:"exocore"`
 }
 
 // rootCmd represents the base command when called without any subcommands

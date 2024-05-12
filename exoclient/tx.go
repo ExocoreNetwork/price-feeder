@@ -28,7 +28,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-const (
+var (
 	chainID = "exocoretestnet_233-1"
 	homeDir = "/Users/xx/.tmp-exocored"
 	appName = "exocore"
@@ -37,10 +37,11 @@ const (
 var encCfg params.EncodingConfig
 var txCfg client.TxConfig
 var kr keyring.Keyring
-var gasPrice uint64
+var defaultGasPrice int64
 var blockMaxGas uint64
 
-func init() {
+func Init(kPath, cID, aName string) {
+	setConf(kPath, cID, aName)
 	config := sdk.GetConfig()
 	cmdcfg.SetBech32Prefixes(config)
 
@@ -52,13 +53,20 @@ func init() {
 		panic(err)
 	}
 
-	gasPrice = uint64(7)
+	defaultGasPrice = int64(7)
 	blockMaxGas = 10000000
 }
 
-func CreateGrpcConn() *grpc.ClientConn {
+func setConf(kPath, cID, aName string) {
+	homeDir = kPath
+	chainID = cID
+	appName = aName
+}
+
+func CreateGrpcConn(target string) *grpc.ClientConn {
 	grpcConn, err := grpc.Dial(
-		"127.0.0.1:9090",
+		//		"127.0.0.1:9090",
+		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(encCfg.InterfaceRegistry).GRPCCodec())),
 	)
@@ -88,7 +96,7 @@ func simulateTx(cc *grpc.ClientConn, txBytes []byte) (uint64, error) {
 	return grpcRes.GasInfo.GasUsed, nil
 }
 
-func signMsg(cc *grpc.ClientConn, name string, msgs ...sdk.Msg) authsigning.Tx {
+func signMsg(cc *grpc.ClientConn, name string, gasPrice int64, msgs ...sdk.Msg) authsigning.Tx {
 	txBuilder := txCfg.NewTxBuilder()
 	_ = txBuilder.SetMsgs(msgs...)
 	txBuilder.SetGasLimit(blockMaxGas)
@@ -119,7 +127,12 @@ func signMsg(cc *grpc.ClientConn, name string, msgs ...sdk.Msg) authsigning.Tx {
 	txBytes, _ := txCfg.TxEncoder()(signedTx)
 	gasLimit, _ := simulateTx(cc, txBytes)
 	gasLimit *= 2
-	fee := gasLimit * gasPrice
+	if gasLimit > math.MaxInt {
+		panic("gasLimit*2 exceeds maxInt64")
+	}
+
+	fee := gasLimit * uint64(gasPrice)
+
 	if fee > math.MaxInt64 {
 		panic("fee exceeds maxInt64")
 	}
@@ -133,7 +146,10 @@ func signMsg(cc *grpc.ClientConn, name string, msgs ...sdk.Msg) authsigning.Tx {
 	return txBuilder.GetTx()
 }
 
-func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, roundID string, decimal int) {
+func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, roundID string, decimal int, gasPrice int64) {
+	if gasPrice == 0 {
+		gasPrice = defaultGasPrice
+	}
 	info, _ := kr.Key("dev0")
 	fromAddr, _ := info.GetAddress()
 
@@ -157,7 +173,7 @@ func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, round
 		baseBlock,
 		1,
 	)
-	signedTx := signMsg(cc, "dev0", msg)
+	signedTx := signMsg(cc, "dev0", gasPrice, msg)
 
 	txBytes, err := txCfg.TxEncoder()(signedTx)
 	if err != nil {

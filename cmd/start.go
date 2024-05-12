@@ -32,20 +32,24 @@ to quickly create a Cobra application.`,
 		_ = f.StartAll()
 		pChan := make(chan *types.PriceInfo)
 		time.Sleep(5 * time.Second)
-		cc := exoclient.CreateGrpcConn()
+
+		confExocore := Conf.Exocore
+		exoclient.Init(confExocore.Keypath, confExocore.ChainID, confExocore.AppName)
+		cc := exoclient.CreateGrpcConn(confExocore.Rpc)
 		defer cc.Close()
 
 		// subscribe newBlock to to trigger tx
-		res := exoclient.Subscriber("ws://127.0.0.1:26657", "/websocket")
+		res := exoclient.Subscriber(confExocore.Ws.Addr, confExocore.Ws.Endpoint)
 		skip := false
 		for r := range res {
 			h, _ := strconv.ParseInt(r.Height, 10, 64)
 			i := h % 10
 			if i < 3 && !skip {
 				tmpI := h - i
-				f.GetLatestPriceFromSourceToken("chainlink", "ETHUSDT", pChan)
+				gasPrice, _ := strconv.ParseInt(r.Gas, 10, 64)
+				f.GetLatestPriceFromSourceToken(Conf.Sources[0], Conf.Tokens[0], pChan)
 				p := <-pChan
-				exoclient.SendTx(cc, 1, uint64(tmpI), p.Price, p.RoundID, p.Decimal)
+				exoclient.SendTx(cc, 1, uint64(tmpI), p.Price, p.RoundID, p.Decimal, gasPrice)
 				skip = true
 			} else if i >= 3 {
 				skip = false
