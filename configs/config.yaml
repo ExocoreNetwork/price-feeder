@@ -3,7 +3,8 @@ sources:
 tokens:
   - ETHUSDT
 exocore:
-  keypath: /Users/linqing/.tmp-exocored
+  keypath: /Users/x/.tmp-exocored
+  sender: local_funded_account
   chainid: exocoretestnet_233-1
   appName: exocore
   rpc: 127.0.0.1:9090

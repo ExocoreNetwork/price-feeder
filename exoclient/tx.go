@@ -32,6 +32,7 @@ var (
 	chainID = "exocoretestnet_233-1"
 	homeDir = "/Users/xx/.tmp-exocored"
 	appName = "exocore"
+	sender  = "dev0"
 )
 
 var encCfg params.EncodingConfig
@@ -40,8 +41,8 @@ var kr keyring.Keyring
 var defaultGasPrice int64
 var blockMaxGas uint64
 
-func Init(kPath, cID, aName string) {
-	setConf(kPath, cID, aName)
+func Init(kPath, cID, aName, s string) {
+	setConf(kPath, cID, aName, s)
 	config := sdk.GetConfig()
 	cmdcfg.SetBech32Prefixes(config)
 
@@ -57,10 +58,11 @@ func Init(kPath, cID, aName string) {
 	blockMaxGas = 10000000
 }
 
-func setConf(kPath, cID, aName string) {
+func setConf(kPath, cID, aName, s string) {
 	homeDir = kPath
 	chainID = cID
 	appName = aName
+	sender = s
 }
 
 func CreateGrpcConn(target string) *grpc.ClientConn {
@@ -118,7 +120,7 @@ func signMsg(cc *grpc.ClientConn, name string, gasPrice int64, msgs ...sdk.Msg) 
 		WithAccountNumber(number).
 		WithSequence(sequence)
 
-	if err = tx.Sign(txf, "dev0", txBuilder, true); err != nil {
+	if err = tx.Sign(txf, sender, txBuilder, true); err != nil {
 		panic(err)
 	}
 
@@ -139,18 +141,18 @@ func signMsg(cc *grpc.ClientConn, name string, gasPrice int64, msgs ...sdk.Msg) 
 	txBuilder.SetGasLimit(gasLimit)
 	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin("aexo", int64(fee))})
 	//sign agin with simulated gas used
-	if err = tx.Sign(txf, "dev0", txBuilder, true); err != nil {
+	if err = tx.Sign(txf, sender, txBuilder, true); err != nil {
 		panic(err)
 	}
 
 	return txBuilder.GetTx()
 }
 
-func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, roundID string, decimal int, gasPrice int64) {
+func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, roundID string, decimal int, gasPrice int64) *sdktx.BroadcastTxResponse {
 	if gasPrice == 0 {
 		gasPrice = defaultGasPrice
 	}
-	info, _ := kr.Key("dev0")
+	info, _ := kr.Key(sender)
 	fromAddr, _ := info.GetAddress()
 
 	msg := oracleTypes.NewMsgCreatePrice(
@@ -173,14 +175,14 @@ func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, round
 		baseBlock,
 		1,
 	)
-	signedTx := signMsg(cc, "dev0", gasPrice, msg)
+	signedTx := signMsg(cc, sender, gasPrice, msg)
 
 	txBytes, err := txCfg.TxEncoder()(signedTx)
 	if err != nil {
 		panic(err)
 	}
 
-	broadcastTxBytes(cc, txBytes)
+	return broadcastTxBytes(cc, txBytes)
 }
 
 func broadcastTxBytes(cc *grpc.ClientConn, txBytes []byte) *sdktx.BroadcastTxResponse {

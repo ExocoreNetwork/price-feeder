@@ -2,7 +2,7 @@ package fetcher
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"time"
 
 	"go.uber.org/atomic"
@@ -130,7 +130,7 @@ func (s *source) Fetch() {
 					price, err := chainlink.Fetch(s.name, tokens[tID].name)
 					if err == nil && prePrice.Price != price.Price {
 						s.tokens[tID] = price
-						fmt.Println("update price:", price.Price)
+						log.Printf("update price:%s, decimal:%d", price.Price, price.Decimal)
 					}
 				}
 			}
@@ -222,11 +222,3 @@ func (f *Fetcher) GetLatestPriceFromSourceToken(source, token string, c chan *ty
 		t string
 	}{c, source, token}
 }
-
-//func (f *Fetcher) GetLatestPriceFromSource() map[string]*typesPriceInfo{
-//
-//}
-//
-//func (f *Fetcher) getLatestPrice() {
-//
-//}

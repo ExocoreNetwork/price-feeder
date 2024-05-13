@@ -78,12 +78,12 @@ func Fetch(source, token string) (*types.PriceInfo, error) {
 	//}
 
 	//// Compute a big.int which is 10**decimals.
-	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	//divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
 
 	//log.Printf("%v Price feed address is  %v\n", description, chainlinkPriceFeedProxyAddress)
 	//log.Printf("Round id is %v\n", roundData.RoundId)
 	//log.Printf("Answer is %v\n", roundData.Answer)
-	log.Printf("Formatted answer is %v\n", divideBigInt(roundData.Answer, divisor))
+	//log.Printf("Formatted answer is %v\n", divideBigInt(roundData.Answer, divisor))
 	//log.Printf("Started at %v\n", formatTime(roundData.StartedAt))
 	//log.Printf("Updated at %v\n", formatTime(roundData.UpdatedAt))
 	//log.Printf("Answered in round %v\n", roundData.AnsweredInRound)

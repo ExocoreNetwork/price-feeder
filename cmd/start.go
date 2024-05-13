@@ -4,6 +4,7 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"log"
 	"strconv"
 	"time"
 
@@ -34,7 +35,7 @@ to quickly create a Cobra application.`,
 		time.Sleep(5 * time.Second)
 
 		confExocore := Conf.Exocore
-		exoclient.Init(confExocore.Keypath, confExocore.ChainID, confExocore.AppName)
+		exoclient.Init(confExocore.Keypath, confExocore.ChainID, confExocore.AppName, confExocore.Sender)
 		cc := exoclient.CreateGrpcConn(confExocore.Rpc)
 		defer cc.Close()
 
@@ -49,7 +50,14 @@ to quickly create a Cobra application.`,
 				gasPrice, _ := strconv.ParseInt(r.Gas, 10, 64)
 				f.GetLatestPriceFromSourceToken(Conf.Sources[0], Conf.Tokens[0], pChan)
 				p := <-pChan
-				exoclient.SendTx(cc, 1, uint64(tmpI), p.Price, p.RoundID, p.Decimal, gasPrice)
+				log.Printf("submit price=%s of token=%s on height=%d", p.Price, Conf.Tokens[0], h)
+				res := exoclient.SendTx(cc, 1, uint64(tmpI), p.Price, p.RoundID, p.Decimal, gasPrice)
+				txResponse := res.GetTxResponse()
+				if txResponse.Code == 0 {
+					log.Println("sendTx successed")
+				} else {
+					log.Printf("sendTx failed, response:%v", txResponse)
+				}
 				skip = true
 			} else if i >= 3 {
 				skip = false

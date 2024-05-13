@@ -19,9 +19,10 @@ type Config struct {
 	Tokens  []string `mapstructure:"tokens"`
 	Exocore struct {
 		Keypath string `mapstructure:"keypath"`
+		Sender  string `mapstructure:"sender"`
 		ChainID string `mapstructure:"chainid"`
 		AppName string `mapstructure:"appname"`
-		Rpc     string `mapstructure:"rpc:"`
+		Rpc     string `mapstructure:"rpc"`
 		Ws      struct {
 			Addr     string `mapstructure:"addr"`
 			Endpoint string `mapstructure:"endpoint"`
