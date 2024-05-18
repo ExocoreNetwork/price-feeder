@@ -11,7 +11,6 @@ import (
 	"github.com/evmos/evmos/v14/encoding"
 
 	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/codec"
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
 	"cosmossdk.io/simapp/params"
@@ -25,7 +24,6 @@ import (
 
 	authTypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
@@ -63,20 +61,6 @@ func setConf(kPath, cID, aName, s string) {
 	chainID = cID
 	appName = aName
 	sender = s
-}
-
-func CreateGrpcConn(target string) *grpc.ClientConn {
-	grpcConn, err := grpc.Dial(
-		//		"127.0.0.1:9090",
-		target,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(encCfg.InterfaceRegistry).GRPCCodec())),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	return grpcConn
 }
 
 func simulateTx(cc *grpc.ClientConn, txBytes []byte) (uint64, error) {
@@ -148,7 +132,7 @@ func signMsg(cc *grpc.ClientConn, name string, gasPrice int64, msgs ...sdk.Msg) 
 	return txBuilder.GetTx()
 }
 
-func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, roundID string, decimal int, gasPrice int64) *sdktx.BroadcastTxResponse {
+func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, roundID string, decimal int, nonce int32, gasPrice int64) *sdktx.BroadcastTxResponse {
 	if gasPrice == 0 {
 		gasPrice = defaultGasPrice
 	}
@@ -173,7 +157,7 @@ func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, round
 			},
 		},
 		baseBlock,
-		1,
+		nonce,
 	)
 	signedTx := signMsg(cc, sender, gasPrice, msg)
 

@@ -3,7 +3,7 @@ sources:
 tokens:
   - ETHUSDT
 exocore:
-  keypath: /Users/x/.tmp-exocored
+  keypath: /Users/xx/.tmp-exocored
   sender: local_funded_account
   chainid: exocoretestnet_233-1
   appName: exocore

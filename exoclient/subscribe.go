@@ -98,7 +98,7 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
 		ticker := time.NewTicker(10 * time.Second)
 		defer func() {
 			ticker.Stop()
-			conn.Close()
+			//			conn.Close()
 		}()
 
 		for {

@@ -8,14 +8,15 @@ import (
 	"strconv"
 	"time"
 
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	"github.com/ExocoreNetwork/price-feeder/exoclient"
 	"github.com/ExocoreNetwork/price-feeder/fetcher"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	"github.com/spf13/cobra"
 )
 
-var oracleP oracletypes.Params
+const statusOk = 0
+
+// var oracleP oracletypes.Params
 
 // startCmd represents the start command
 var startCmd = &cobra.Command{
@@ -36,31 +37,79 @@ to quickly create a Cobra application.`,
 
 		confExocore := Conf.Exocore
 		exoclient.Init(confExocore.Keypath, confExocore.ChainID, confExocore.AppName, confExocore.Sender)
+
 		cc := exoclient.CreateGrpcConn(confExocore.Rpc)
 		defer cc.Close()
+		oracleP, err := exoclient.GetParams(cc)
+		if err != nil {
+			log.Fatalf("Fail to get oracle params:%s", err)
+		}
+		liveFeeders := []chan struct {
+			h uint64
+			g int64
+		}{}
+		for feederID, feeder := range oracleP.TokenFeeders {
+			if feederID == 0 {
+				// feederID=0 is reserved
+				continue
+			}
+			startBlock := feeder.StartBaseBlock
+			startRoundID := feeder.StartRoundID
+			interval := feeder.Interval
+			for _, token := range Conf.Tokens {
+				if token == oracleP.Tokens[feeder.TokenID].Name+"USDT" {
+					go func(feederID, startBlock, interval, roundID uint64) {
+						trigger := make(chan struct {
+							h uint64
+							g int64
+						}, 3)
+						liveFeeders = append(liveFeeders, trigger)
+						prevPrice := ""
+						for t := range trigger {
+							if t.h < startBlock {
+								continue
+							}
+							delta := (t.h - startBlock) % interval
+							roundID := (t.h-startBlock)/interval + startRoundID
+							if delta < 3 {
+								f.GetLatestPriceFromSourceToken(Conf.Sources[0], Conf.Tokens[0], pChan)
+								p := <-pChan
+								if prevPrice == p.Price {
+									// if prevPrice not changed between different rounds, we don't submit any messages and the oracle module will use the price from former round to update next round.
+									log.Println("price not changed, skip submitting price for roundID:", roundID)
+									continue
+								}
+								prevPrice = p.Price
+								basedBlock := t.h - delta
+								//f.GetLatestPriceFromSourceToken(Conf.Sources[0], Conf.Tokens[0], pChan)
+								log.Printf("submit price=%s of token=%s on height=%d for roundID:%d", p.Price, Conf.Tokens[0], t.h, roundID)
+								res := exoclient.SendTx(cc, feederID, basedBlock, p.Price, p.RoundID, p.Decimal, int32(delta)+1, t.g)
+								txResponse := res.GetTxResponse()
+								if txResponse.Code == statusOk {
+									log.Println("sendTx successed")
+								} else {
+									prevPrice = ""
+									log.Printf("sendTx failed, response:%v", txResponse)
+								}
+							}
+						}
+					}(uint64(feederID), startBlock, interval, startRoundID)
+					break
+				}
+			}
+		}
 
 		// subscribe newBlock to to trigger tx
 		res := exoclient.Subscriber(confExocore.Ws.Addr, confExocore.Ws.Endpoint)
-		skip := false
+		//		skip := false
 		for r := range res {
-			h, _ := strconv.ParseInt(r.Height, 10, 64)
-			i := h % 10
-			if i < 3 && !skip {
-				tmpI := h - i
-				gasPrice, _ := strconv.ParseInt(r.Gas, 10, 64)
-				f.GetLatestPriceFromSourceToken(Conf.Sources[0], Conf.Tokens[0], pChan)
-				p := <-pChan
-				log.Printf("submit price=%s of token=%s on height=%d", p.Price, Conf.Tokens[0], h)
-				res := exoclient.SendTx(cc, 1, uint64(tmpI), p.Price, p.RoundID, p.Decimal, gasPrice)
-				txResponse := res.GetTxResponse()
-				if txResponse.Code == 0 {
-					log.Println("sendTx successed")
-				} else {
-					log.Printf("sendTx failed, response:%v", txResponse)
-				}
-				skip = true
-			} else if i >= 3 {
-				skip = false
+			height, _ := strconv.ParseInt(r.Height, 10, 64)
+			gasPrice, _ := strconv.ParseInt(r.Gas, 10, 64)
+			for _, t := range liveFeeders {
+				t <- struct {
+					h uint64
+					g int64
+				}{h: uint64(height), g: gasPrice}
 			}
 		}
 	},
