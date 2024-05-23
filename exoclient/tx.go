@@ -2,6 +2,7 @@ package exoclient
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"math"
 	"time"
@@ -10,57 +11,66 @@ import (
 	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	"github.com/evmos/evmos/v14/encoding"
 
+	cryptoed25519 "crypto/ed25519"
+
+	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
+
 	"github.com/cosmos/cosmos-sdk/client"
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
 	"cosmossdk.io/simapp/params"
 	//	"github.com/cosmos/cosmos-sdk/codec"
 	cmdcfg "github.com/ExocoreNetwork/exocore/cmd/config"
-	"github.com/cosmos/cosmos-sdk/client/tx"
-	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
+	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 
 	authTypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"google.golang.org/grpc"
 )
 
+//type SID uint64
+
+const (
+	Chainlink uint64 = 1
+)
+
 var (
 	chainID = "exocoretestnet_233-1"
-	homeDir = "/Users/xx/.tmp-exocored"
-	appName = "exocore"
-	sender  = "dev0"
 )
 
 var encCfg params.EncodingConfig
 var txCfg client.TxConfig
-var kr keyring.Keyring
 var defaultGasPrice int64
 var blockMaxGas uint64
 
-func Init(kPath, cID, aName, s string) {
-	setConf(kPath, cID, aName, s)
+var (
+	privKey cryptotypes.PrivKey
+	pubKey  cryptotypes.PubKey
+)
+
+func Init(mnemonic, privBase64, cID string) {
 	config := sdk.GetConfig()
 	cmdcfg.SetBech32Prefixes(config)
 
 	encCfg = encoding.MakeConfig(app.ModuleBasics)
 	txCfg = encCfg.TxConfig
 
-	var err error
-	if kr, err = keyring.New(appName, keyring.BackendTest, homeDir, nil, encCfg.Codec); err != nil {
-		panic(err)
+	if len(mnemonic) > 0 {
+		privKey = ed25519.GenPrivKeyFromSecret([]byte(mnemonic))
+		pubKey = privKey.PubKey()
+	} else {
+		privBytes, _ := base64.StdEncoding.DecodeString(privBase64)
+		privKey = &ed25519.PrivKey{
+			Key: cryptoed25519.PrivateKey(privBytes),
+		}
 	}
-
-	defaultGasPrice = int64(7)
-	blockMaxGas = 10000000
-}
-
-func setConf(kPath, cID, aName, s string) {
-	homeDir = kPath
 	chainID = cID
-	appName = aName
-	sender = s
+	defaultGasPrice = int64(7)
+	// TODO: set from exocore's params
+	blockMaxGas = 10000000
 }
 
 func simulateTx(cc *grpc.ClientConn, txBytes []byte) (uint64, error) {
@@ -82,41 +92,22 @@ func simulateTx(cc *grpc.ClientConn, txBytes []byte) (uint64, error) {
 	return grpcRes.GasInfo.GasUsed, nil
 }
 
-func signMsg(cc *grpc.ClientConn, name string, gasPrice int64, msgs ...sdk.Msg) authsigning.Tx {
+// func signMsg(cc *grpc.ClientConn, name string, gasPrice int64, msgs ...sdk.Msg) authsigning.Tx {
+func signMsg(cc *grpc.ClientConn, gasPrice int64, msgs ...sdk.Msg) authsigning.Tx {
 	txBuilder := txCfg.NewTxBuilder()
 	_ = txBuilder.SetMsgs(msgs...)
 	txBuilder.SetGasLimit(blockMaxGas)
 	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin("aexo", math.MaxInt64)})
 
-	info, _ := kr.Key(name)
-	fromAddr, _ := info.GetAddress()
+	signMode := txCfg.SignModeHandler().DefaultMode()
 
-	number, sequence, err := queryAccount(cc, fromAddr)
-	if err != nil {
-		fmt.Println("debug-queryAccount-err:", err)
-		panic(err)
-	}
-
-	txf := tx.Factory{}.
-		WithChainID(chainID).
-		WithKeybase(kr).
-		WithTxConfig(txCfg).
-		WithAccountNumber(number).
-		WithSequence(sequence)
-
-	if err = tx.Sign(txf, sender, txBuilder, true); err != nil {
-		panic(err)
-	}
-
-	//simulate and sign again
-	signedTx := txBuilder.GetTx()
-	txBytes, _ := txCfg.TxEncoder()(signedTx)
+	_ = txBuilder.SetSignatures(getSignature(nil, pubKey, signMode))
+	txBytes, _ := txCfg.TxEncoder()(txBuilder.GetTx())
 	gasLimit, _ := simulateTx(cc, txBytes)
 	gasLimit *= 2
 	if gasLimit > math.MaxInt {
 		panic("gasLimit*2 exceeds maxInt64")
 	}
-
 	fee := gasLimit * uint64(gasPrice)
 
 	if fee > math.MaxInt64 {
@@ -124,27 +115,54 @@ func signMsg(cc *grpc.ClientConn, name string, gasPrice int64, msgs ...sdk.Msg) 
 	}
 	txBuilder.SetGasLimit(gasLimit)
 	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin("aexo", int64(fee))})
-	//sign agin with simulated gas used
-	if err = tx.Sign(txf, sender, txBuilder, true); err != nil {
-		panic(err)
+
+	bytesToSign := getSignBytes(txCfg, txBuilder.GetTx(), chainID)
+	sigBytes, err := privKey.Sign(bytesToSign)
+	if err != nil {
+		panic(fmt.Sprintf("priv_sign fail %s", err.Error()))
+	}
+	_ = txBuilder.SetSignatures(getSignature(sigBytes, pubKey, signMode))
+	return txBuilder.GetTx()
+}
+
+func getSignBytes(txCfg client.TxConfig, tx authsigning.Tx, cID string) []byte {
+	b, err := txCfg.SignModeHandler().GetSignBytes(
+		txCfg.SignModeHandler().DefaultMode(),
+		authsigning.SignerData{
+			ChainID: cID,
+		},
+		tx,
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Get bytesToSign fail, %s", err.Error()))
 	}
 
-	return txBuilder.GetTx()
+	return b
+}
+
+func getSignature(s []byte, pub cryptotypes.PubKey, signMode signing.SignMode) signing.SignatureV2 {
+	sig := signing.SignatureV2{
+		PubKey: pub,
+		Data: &signing.SingleSignatureData{
+			SignMode:  signMode,
+			Signature: s,
+		},
+	}
+
+	return sig
 }
 
 func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, roundID string, decimal int, nonce int32, gasPrice int64) *sdktx.BroadcastTxResponse {
 	if gasPrice == 0 {
 		gasPrice = defaultGasPrice
 	}
-	info, _ := kr.Key(sender)
-	fromAddr, _ := info.GetAddress()
 
 	msg := oracleTypes.NewMsgCreatePrice(
-		sdk.ValAddress(fromAddr.Bytes()).String(),
+		sdk.AccAddress(pubKey.Address()).String(),
 		feederID,
 		[]*oracleTypes.PriceSource{
 			{
-				SourceID: 1,
+				SourceID: Chainlink,
 				Prices: []*oracleTypes.PriceTimeDetID{
 					{
 						Price:     price,
@@ -159,7 +177,7 @@ func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, round
 		baseBlock,
 		nonce,
 	)
-	signedTx := signMsg(cc, sender, gasPrice, msg)
+	signedTx := signMsg(cc, gasPrice, msg)
 
 	txBytes, err := txCfg.TxEncoder()(signedTx)
 	if err != nil {

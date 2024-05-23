@@ -17,9 +17,11 @@ var Conf Config
 type Config struct {
 	Sources []string `mapstructure:"sources"`
 	Tokens  []string `mapstructure:"tokens"`
+	Sender  struct {
+		Mnemonic string `mapstructure:"mnemonic"`
+		Path     string `mapstructure:"path"`
+	} `mapstructure:"sender"`
 	Exocore struct {
-		Keypath string `mapstructure:"keypath"`
-		Sender  string `mapstructure:"sender"`
 		ChainID string `mapstructure:"chainid"`
 		AppName string `mapstructure:"appname"`
 		Rpc     string `mapstructure:"rpc"`

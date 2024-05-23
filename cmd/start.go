@@ -4,19 +4,34 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
+	"os"
+	"path"
 	"strconv"
 	"time"
 
 	"github.com/ExocoreNetwork/price-feeder/exoclient"
 	"github.com/ExocoreNetwork/price-feeder/fetcher"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	"github.com/cosmos/go-bip39"
 	"github.com/spf13/cobra"
 )
 
-const statusOk = 0
+const (
+	statusOk = 0
+	privFile = "priv_validator_key.json"
+)
 
-// var oracleP oracletypes.Params
+var mnemonic = ""
+
+type PrivValidatorKey struct {
+	Address string `json:"address"`
+	PrivKey struct {
+		Value string `json:"value"`
+	} `json:"priv_key"`
+}
 
 // startCmd represents the start command
 var startCmd = &cobra.Command{
@@ -31,12 +46,37 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// start fetcher to get prices from chainlink
 		f := fetcher.Init(Conf.Sources, Conf.Tokens)
+		// start all supported sources and tokens
 		_ = f.StartAll()
 		pChan := make(chan *types.PriceInfo)
 		time.Sleep(5 * time.Second)
 
 		confExocore := Conf.Exocore
-		exoclient.Init(confExocore.Keypath, confExocore.ChainID, confExocore.AppName, confExocore.Sender)
+		confSender := Conf.Sender
+		privBase64 := ""
+
+		if len(mnemonic) == 0 {
+			mnemonic = confSender.Mnemonic
+		}
+		if len(mnemonic) > 0 && !bip39.IsMnemonicValid(mnemonic) {
+			panic("invalid mnemonic")
+		}
+
+		if len(mnemonic) == 0 {
+			// load privatekey from local path
+			file, err := os.Open(path.Join(confSender.Path, privFile))
+			if err != nil {
+				panic(fmt.Sprintf("fail to open consensuskey file, %s", err.Error()))
+			}
+			defer file.Close()
+			var pvKey PrivValidatorKey
+			if err := json.NewDecoder(file).Decode(&pvKey); err != nil {
+				panic(fmt.Sprintf("fail to parse consensuskey file from json, %s", err.Error()))
+			}
+			privBase64 = pvKey.PrivKey.Value
+		}
+		// Init consensus keys and related tx infos
+		exoclient.Init(confSender.Mnemonic, privBase64, confExocore.ChainID)
 
 		cc := exoclient.CreateGrpcConn(confExocore.Rpc)
 		defer cc.Close()
@@ -48,6 +88,8 @@ to quickly create a Cobra application.`,
 			h uint64
 			g int64
 		}{}
+
+		// check all live feeders and set seperate routine to udpate prices
 		for feederID, feeder := range oracleP.TokenFeeders {
 			if feederID == 0 {
 				// feederID=0 is reserved
@@ -66,6 +108,7 @@ to quickly create a Cobra application.`,
 						liveFeeders = append(liveFeeders, trigger)
 						prevPrice := ""
 						for t := range trigger {
+							log.Printf("debug-feeder. triggered, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}", feederID, startBlock, interval, roundID)
 							if t.h < startBlock {
 								continue
 							}
@@ -101,10 +144,10 @@ to quickly create a Cobra application.`,
 
 		// subscribe newBlock to to trigger tx
 		res := exoclient.Subscriber(confExocore.Ws.Addr, confExocore.Ws.Endpoint)
-		//		skip := false
 		for r := range res {
 			height, _ := strconv.ParseInt(r.Height, 10, 64)
 			gasPrice, _ := strconv.ParseInt(r.Gas, 10, 64)
+			log.Println("debug-newblock-height:", height)
 			for _, t := range liveFeeders {
 				t <- struct {
 					h uint64
@@ -117,14 +160,5 @@ to quickly create a Cobra application.`,
 
 func init() {
 	rootCmd.AddCommand(startCmd)
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// startCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	//startCmd.Flags().StringVarP(&cfgPath, "cfgpath", "c", "", "configpath")
-	//startCmd.MarkFlagRequired("cfgpath")
+	startCmd.Flags().StringVarP(&mnemonic, "mnemonic", "m", "", "mnemonic of consensus key")
 }

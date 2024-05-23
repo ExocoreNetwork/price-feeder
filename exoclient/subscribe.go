@@ -66,6 +66,7 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
 			return nil
 		})
 		for {
+			//			fmt.Println("debug-subscriber: start")
 			_, data, err := conn.ReadMessage()
 			if err != nil {
 				// TODO: reconnect

@@ -2,9 +2,10 @@ sources:
   - chainlink
 tokens:
   - ETHUSDT
+sender:
+  mnemonic: "wonder quality resource ketchup occur stadium vicious output situate plug second monkey harbor vanish then myself primary feed earth story real soccer shove like" 
+  path: /Users/xx/.tmp-exocored/config
 exocore:
-  keypath: /Users/xx/.tmp-exocored
-  sender: local_funded_account
   chainid: exocoretestnet_233-1
   appName: exocore
   rpc: 127.0.0.1:9090
