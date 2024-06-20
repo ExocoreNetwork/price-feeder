@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc"
 )
 
+// GetParams queries oracle params
 func GetParams(grpcConn *grpc.ClientConn) (oracleTypes.Params, error) {
 	oracleClient := oracleTypes.NewQueryClient(grpcConn)
 	paramsRes, err := oracleClient.Params(context.Background(), &oracleTypes.QueryParamsRequest{})

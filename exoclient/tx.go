@@ -27,30 +27,28 @@ import (
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 
-	authTypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"google.golang.org/grpc"
 )
 
-//type SID uint64
-
 const (
-	Chainlink uint64 = 1
+	Chainlink      uint64 = 1
+	denom                 = "aexo"
+	layout                = "2006-01-02 15:04:05"
+	defaultChainID        = "exocoretestnet_233-1"
 )
 
 var (
-	chainID = "exocoretestnet_233-1"
-)
+	chainID         string
+	encCfg          params.EncodingConfig
+	txCfg           client.TxConfig
+	defaultGasPrice int64
+	blockMaxGas     uint64
 
-var encCfg params.EncodingConfig
-var txCfg client.TxConfig
-var defaultGasPrice int64
-var blockMaxGas uint64
-
-var (
 	privKey cryptotypes.PrivKey
 	pubKey  cryptotypes.PubKey
 )
 
+// Init intialize the exoclient with configuration including consensuskey info, chainID
 func Init(mnemonic, privBase64, cID string) {
 	config := sdk.GetConfig()
 	cmdcfg.SetBech32Prefixes(config)
@@ -66,6 +64,10 @@ func Init(mnemonic, privBase64, cID string) {
 		privKey = &ed25519.PrivKey{
 			Key: cryptoed25519.PrivateKey(privBytes),
 		}
+		pubKey = privKey.PubKey()
+	}
+	if len(cID) == 0 {
+		chainID = defaultChainID
 	}
 	chainID = cID
 	defaultGasPrice = int64(7)
@@ -73,48 +75,16 @@ func Init(mnemonic, privBase64, cID string) {
 	blockMaxGas = 10000000
 }
 
-func simulateTx(cc *grpc.ClientConn, txBytes []byte) (uint64, error) {
-	// Simulate the tx via gRPC. We create a new client for the Protobuf Tx service
-	txClient := sdktx.NewServiceClient(cc)
-
-	// call the Simulate method on this client.
-	grpcRes, err := txClient.Simulate(
-		context.Background(),
-		&sdktx.SimulateRequest{
-			TxBytes: txBytes,
-		},
-	)
-	if err != nil {
-		fmt.Println("debug-simulateTx-err:", err)
-		return 0, err
-	}
-
-	return grpcRes.GasInfo.GasUsed, nil
-}
-
-// func signMsg(cc *grpc.ClientConn, name string, gasPrice int64, msgs ...sdk.Msg) authsigning.Tx {
+// signMsg signs the message with consensusskey
 func signMsg(cc *grpc.ClientConn, gasPrice int64, msgs ...sdk.Msg) authsigning.Tx {
 	txBuilder := txCfg.NewTxBuilder()
 	_ = txBuilder.SetMsgs(msgs...)
 	txBuilder.SetGasLimit(blockMaxGas)
-	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin("aexo", math.MaxInt64)})
+	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin(denom, math.MaxInt64)})
 
 	signMode := txCfg.SignModeHandler().DefaultMode()
 
 	_ = txBuilder.SetSignatures(getSignature(nil, pubKey, signMode))
-	txBytes, _ := txCfg.TxEncoder()(txBuilder.GetTx())
-	gasLimit, _ := simulateTx(cc, txBytes)
-	gasLimit *= 2
-	if gasLimit > math.MaxInt {
-		panic("gasLimit*2 exceeds maxInt64")
-	}
-	fee := gasLimit * uint64(gasPrice)
-
-	if fee > math.MaxInt64 {
-		panic("fee exceeds maxInt64")
-	}
-	txBuilder.SetGasLimit(gasLimit)
-	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin("aexo", int64(fee))})
 
 	bytesToSign := getSignBytes(txCfg, txBuilder.GetTx(), chainID)
 	sigBytes, err := privKey.Sign(bytesToSign)
@@ -125,6 +95,7 @@ func signMsg(cc *grpc.ClientConn, gasPrice int64, msgs ...sdk.Msg) authsigning.T
 	return txBuilder.GetTx()
 }
 
+// getSignBytes reteive the bytes from tx for signing
 func getSignBytes(txCfg client.TxConfig, tx authsigning.Tx, cID string) []byte {
 	b, err := txCfg.SignModeHandler().GetSignBytes(
 		txCfg.SignModeHandler().DefaultMode(),
@@ -140,6 +111,7 @@ func getSignBytes(txCfg client.TxConfig, tx authsigning.Tx, cID string) []byte {
 	return b
 }
 
+// getSignature assembles a siging.SignatureV2 structure
 func getSignature(s []byte, pub cryptotypes.PubKey, signMode signing.SignMode) signing.SignatureV2 {
 	sig := signing.SignatureV2{
 		PubKey: pub,
@@ -152,11 +124,13 @@ func getSignature(s []byte, pub cryptotypes.PubKey, signMode signing.SignMode) s
 	return sig
 }
 
+// SendTx build a create-price message and broadcast to the exocoreChain through grpc connection
 func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, roundID string, decimal int, nonce int32, gasPrice int64) *sdktx.BroadcastTxResponse {
 	if gasPrice == 0 {
 		gasPrice = defaultGasPrice
 	}
 
+	// build create-price message
 	msg := oracleTypes.NewMsgCreatePrice(
 		sdk.AccAddress(pubKey.Address()).String(),
 		feederID,
@@ -167,7 +141,7 @@ func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, round
 					{
 						Price:     price,
 						Decimal:   int32(decimal),
-						Timestamp: time.Now().String(),
+						Timestamp: time.Now().UTC().Format(layout),
 						DetID:     roundID,
 					},
 				},
@@ -177,8 +151,11 @@ func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, round
 		baseBlock,
 		nonce,
 	)
+
+	// sign the message with validator consensus-key configured
 	signedTx := signMsg(cc, gasPrice, msg)
 
+	// encode transaction to broadcast
 	txBytes, err := txCfg.TxEncoder()(signedTx)
 	if err != nil {
 		panic(err)
@@ -187,6 +164,7 @@ func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, round
 	return broadcastTxBytes(cc, txBytes)
 }
 
+// boradcastTxByBytes broadcasts the signed transaction
 func broadcastTxBytes(cc *grpc.ClientConn, txBytes []byte) *sdktx.BroadcastTxResponse {
 	txClient := sdktx.NewServiceClient(cc)
 	ccRes, err := txClient.BroadcastTx(
@@ -200,22 +178,4 @@ func broadcastTxBytes(cc *grpc.ClientConn, txBytes []byte) *sdktx.BroadcastTxRes
 		panic(err)
 	}
 	return ccRes
-}
-
-func queryAccount(grpcConn *grpc.ClientConn, myAddress sdk.AccAddress) (number, sequence uint64, err error) {
-	authClient := authTypes.NewQueryClient(grpcConn)
-	var accountRes *authTypes.QueryAccountResponse
-	accountRes, err = authClient.Account(context.Background(), &authTypes.QueryAccountRequest{
-		Address: myAddress.String(),
-	})
-	if err != nil {
-		fmt.Println("debug-queryAccount-err:", err)
-		return
-	}
-	var account authTypes.AccountI
-	_ = encCfg.Codec.UnpackAny(accountRes.Account, &account)
-	number = account.GetAccountNumber()
-	sequence = account.GetSequence()
-
-	return
 }

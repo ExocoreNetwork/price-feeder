@@ -11,6 +11,10 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	eventNewBlock = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"tm.event='NewBlock'"}}`
+)
+
 type result struct {
 	Result struct {
 		Query string `json:"query"`
@@ -34,7 +38,8 @@ type ReCh struct {
 	Gas    string
 }
 
-func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
+// setup ws connection, and subscribe newblock events
+func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan struct{}) {
 	u, err := url.Parse(remoteAddr)
 	if err != nil {
 		panic(err)
@@ -54,10 +59,10 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
 		panic(err)
 	}
 
-	stop := make(chan struct{})
+	stop = make(chan struct{})
 	ret = make(chan ReCh)
 
-	// read
+	// read routine reads events(newBlock) from websocket
 	go func() {
 		defer func() {
 			conn.Close()
@@ -93,8 +98,12 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
 		}
 	}()
 
-	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"tm.event='NewBlock'"}}`))
-	// write
+	// write message to subscribe newBlock event
+	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventNewBlock)); err != nil {
+		panic("fail to subscribe event")
+	}
+
+	// write routine sends ping messages every 10 seconds
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer func() {
@@ -106,7 +115,6 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
 			select {
 			case <-ticker.C:
 				if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-					fmt.Println("write-tic-err")
 					panic(err)
 				}
 			case <-stop:
@@ -114,7 +122,6 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh) {
 					websocket.CloseMessage,
 					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
 				); err != nil {
-					fmt.Println("write-stop-err")
 					panic(err)
 				}
 			}

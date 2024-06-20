@@ -125,6 +125,7 @@ func (s *source) Fetch() {
 	case "chainlink":
 		for tID, prePrice := range s.tokens {
 			if tID < len(tokens) {
+				// TODO: lock, when more than one sources
 				t := tokens[tID]
 				if t.active {
 					price, err := chainlink.Fetch(s.name, tokens[tID].name)
@@ -215,7 +216,6 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 }
 
 func (f *Fetcher) GetLatestPriceFromSourceToken(source, token string, c chan *types.PriceInfo) {
-	//f.getLatestPriceWithSourceToken<-struct{s:source, t:token, p: c}
 	f.getLatestPriceWithSourceToken <- struct {
 		p chan *types.PriceInfo
 		s string

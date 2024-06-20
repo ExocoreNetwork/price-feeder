@@ -6,10 +6,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// CreateGrpcConn creates an grpc connection to the target
 func CreateGrpcConn(target string) *grpc.ClientConn {
 	grpcConn, err := grpc.Dial(
-		//		"127.0.0.1:9090",
 		target,
+		// for internal usage, no need to set TSL
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(encCfg.InterfaceRegistry).GRPCCodec())),
 	)

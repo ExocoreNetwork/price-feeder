@@ -20,11 +20,13 @@ import (
 )
 
 const (
-	statusOk = 0
-	privFile = "priv_validator_key.json"
+	statusOk     = 0
+	privFile     = "priv_validator_key.json"
+	baseCurrency = "USDT"
 )
 
-var mnemonic = ""
+// var mnemonic = ""
+var mnemonic string
 
 type PrivValidatorKey struct {
 	Address string `json:"address"`
@@ -55,11 +57,9 @@ to quickly create a Cobra application.`,
 		confSender := Conf.Sender
 		privBase64 := ""
 
-		if len(mnemonic) == 0 {
+		// if mnemonic is not set from flag, then check config file to find if there is mnemonic configured
+		if len(mnemonic) == 0 && len(confSender.Mnemonic) > 0 {
 			mnemonic = confSender.Mnemonic
-		}
-		if len(mnemonic) > 0 && !bip39.IsMnemonicValid(mnemonic) {
-			panic("invalid mnemonic")
 		}
 
 		if len(mnemonic) == 0 {
@@ -74,9 +74,11 @@ to quickly create a Cobra application.`,
 				panic(fmt.Sprintf("fail to parse consensuskey file from json, %s", err.Error()))
 			}
 			privBase64 = pvKey.PrivKey.Value
+		} else if !bip39.IsMnemonicValid(mnemonic) {
+			panic("invalid mnemonic")
 		}
 		// Init consensus keys and related tx infos
-		exoclient.Init(confSender.Mnemonic, privBase64, confExocore.ChainID)
+		exoclient.Init(mnemonic, privBase64, confExocore.ChainID)
 
 		cc := exoclient.CreateGrpcConn(confExocore.Rpc)
 		defer cc.Close()
@@ -84,6 +86,7 @@ to quickly create a Cobra application.`,
 		if err != nil {
 			log.Fatalf("Fail to get oracle params:%s", err)
 		}
+
 		liveFeeders := []chan struct {
 			h uint64
 			g int64
@@ -99,13 +102,13 @@ to quickly create a Cobra application.`,
 			startRoundID := feeder.StartRoundID
 			interval := feeder.Interval
 			for _, token := range Conf.Tokens {
-				if token == oracleP.Tokens[feeder.TokenID].Name+"USDT" {
+				if token == oracleP.Tokens[feeder.TokenID].Name+baseCurrency {
+					trigger := make(chan struct {
+						h uint64
+						g int64
+					}, 3)
+					liveFeeders = append(liveFeeders, trigger)
 					go func(feederID, startBlock, interval, roundID uint64) {
-						trigger := make(chan struct {
-							h uint64
-							g int64
-						}, 3)
-						liveFeeders = append(liveFeeders, trigger)
 						prevPrice := ""
 						for t := range trigger {
 							log.Printf("debug-feeder. triggered, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}", feederID, startBlock, interval, roundID)
@@ -115,8 +118,10 @@ to quickly create a Cobra application.`,
 							delta := (t.h - startBlock) % interval
 							roundID := (t.h-startBlock)/interval + startRoundID
 							if delta < 3 {
-								f.GetLatestPriceFromSourceToken(Conf.Sources[0], Conf.Tokens[0], pChan)
+								// TODO: use source based on oracle-params
+								f.GetLatestPriceFromSourceToken(Conf.Sources[0], token, pChan)
 								p := <-pChan
+								// TODO: this price should be compared with the current price from oracle, not from source
 								if prevPrice == p.Price {
 									// if prevPrice not changed between different rounds, we don't submit any messages and the oracle module will use the price from former round to update next round.
 									log.Println("price not changed, skip submitting price for roundID:", roundID)
@@ -124,8 +129,7 @@ to quickly create a Cobra application.`,
 								}
 								prevPrice = p.Price
 								basedBlock := t.h - delta
-								//f.GetLatestPriceFromSourceToken(Conf.Sources[0], Conf.Tokens[0], pChan)
-								log.Printf("submit price=%s of token=%s on height=%d for roundID:%d", p.Price, Conf.Tokens[0], t.h, roundID)
+								log.Printf("submit price=%s of token=%s on height=%d for roundID:%d", p.Price, token, t.h, roundID)
 								res := exoclient.SendTx(cc, feederID, basedBlock, p.Price, p.RoundID, p.Decimal, int32(delta)+1, t.g)
 								txResponse := res.GetTxResponse()
 								if txResponse.Code == statusOk {
@@ -143,7 +147,7 @@ to quickly create a Cobra application.`,
 		}
 
 		// subscribe newBlock to to trigger tx
-		res := exoclient.Subscriber(confExocore.Ws.Addr, confExocore.Ws.Endpoint)
+		res, _ := exoclient.Subscriber(confExocore.Ws.Addr, confExocore.Ws.Endpoint)
 		for r := range res {
 			height, _ := strconv.ParseInt(r.Height, 10, 64)
 			gasPrice, _ := strconv.ParseInt(r.Gas, 10, 64)
