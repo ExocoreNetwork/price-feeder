@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ExocoreNetwork/price-feeder/exoclient"
@@ -108,10 +109,11 @@ to quickly create a Cobra application.`,
 						g int64
 					}, 3)
 					liveFeeders = append(liveFeeders, trigger)
-					go func(feederID, startBlock, interval, roundID uint64) {
+					decimal := oracleP.Tokens[feeder.TokenID].Decimal
+					go func(feederID, startBlock, interval, startRoundID uint64, decimal int) {
 						prevPrice := ""
 						for t := range trigger {
-							log.Printf("debug-feeder. triggered, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}", feederID, startBlock, interval, roundID)
+							log.Printf("debug-feeder. triggered, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}", feederID, startBlock, interval, startRoundID)
 							if t.h < startBlock {
 								continue
 							}
@@ -129,7 +131,15 @@ to quickly create a Cobra application.`,
 								}
 								prevPrice = p.Price
 								basedBlock := t.h - delta
-								log.Printf("submit price=%s of token=%s on height=%d for roundID:%d", p.Price, token, t.h, roundID)
+
+								if p.Decimal > decimal {
+									p.Price = p.Price[:len(p.Price)-int(p.Decimal-decimal)]
+									p.Decimal = decimal
+								} else if p.Decimal < decimal {
+									p.Price = p.Price + strings.Repeat("0", decimal-p.Decimal)
+									p.Decimal = decimal
+								}
+								log.Printf("submit price=%s decimal=%d of token=%s on height=%d for roundID:%d", p.Price, p.Decimal, token, t.h, roundID)
 								res := exoclient.SendTx(cc, feederID, basedBlock, p.Price, p.RoundID, p.Decimal, int32(delta)+1, t.g)
 								txResponse := res.GetTxResponse()
 								if txResponse.Code == statusOk {
@@ -140,7 +150,7 @@ to quickly create a Cobra application.`,
 								}
 							}
 						}
-					}(uint64(feederID), startBlock, interval, startRoundID)
+					}(uint64(feederID), startBlock, interval, startRoundID, int(decimal))
 					break
 				}
 			}
