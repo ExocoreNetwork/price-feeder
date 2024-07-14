@@ -13,6 +13,13 @@ import (
 
 const (
 	eventNewBlock = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"tm.event='NewBlock'"}}`
+	maxRetry      = 100
+)
+
+var (
+	conn    *websocket.Conn
+	rHeader http.Header
+	host    string
 )
 
 type result struct {
@@ -51,15 +58,16 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 		},
 		Proxy: http.ProxyFromEnvironment,
 	}
-	rHeader := http.Header{}
-
-	conn, _, err := dialer.Dial("ws://"+u.Host+endpoint, rHeader)
+	rHeader = http.Header{}
+	host = u.Host
+	conn, _, err = dialer.Dial("ws://"+host+endpoint, rHeader)
 
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("dail ws failed, error:%s", err))
 	}
 
 	stop = make(chan struct{})
+	stopInternal := make(chan struct{})
 	ret = make(chan ReCh)
 
 	// read routine reads events(newBlock) from websocket
@@ -71,12 +79,46 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 			return nil
 		})
 		for {
-			//			fmt.Println("debug-subscriber: start")
 			_, data, err := conn.ReadMessage()
 			if err != nil {
-				// TODO: reconnect
-				fmt.Println("read err")
-				panic(err)
+				fmt.Println("read err:", err)
+				if !websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
+					return
+				}
+				// close write routine
+				close(stopInternal)
+				// reconnect ws
+				attempt := 0
+				for ; err != nil; conn, _, err = dialer.Dial("ws://"+host+endpoint, rHeader) {
+					fmt.Println("failed to reconnect, retrying...", attempt)
+					time.Sleep(1 << uint(attempt) * time.Second)
+					attempt++
+					if attempt > maxRetry {
+						fmt.Println("failed to reconnect after max retry")
+						return
+					}
+				}
+				fmt.Println("reconnected.")
+				conn.SetPongHandler(func(string) error {
+					return nil
+				})
+				// rest stopInternal
+				stopInternal = make(chan struct{})
+				// setup write routine to set ping messages
+				go writeRoutine(conn, stopInternal)
+				// resubscribe event
+				attempt = 0
+				for attempt < maxRetry {
+					if err = conn.WriteMessage(websocket.TextMessage, []byte(eventNewBlock)); err == nil {
+						break
+					}
+					attempt++
+				}
+				if attempt == maxRetry {
+					fmt.Println("fail to subscribe event after max retry")
+					return
+				}
+				continue
 			}
 			var response result
 			err = json.Unmarshal(data, &response)
@@ -104,28 +146,31 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 	}
 
 	// write routine sends ping messages every 10 seconds
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer func() {
-			ticker.Stop()
-			//			conn.Close()
-		}()
+	go writeRoutine(conn, stopInternal)
+	return
+}
 
-		for {
-			select {
-			case <-ticker.C:
-				if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-					panic(err)
-				}
-			case <-stop:
-				if err := conn.WriteMessage(
-					websocket.CloseMessage,
-					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
-				); err != nil {
-					panic(err)
-				}
+func writeRoutine(conn *websocket.Conn, stop chan struct{}) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer func() {
+		ticker.Stop()
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+				panic(err)
+			}
+		case <-stop:
+			if err := conn.WriteMessage(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+			); err != nil {
+				fmt.Println("close err:", err)
+				return
 			}
 		}
-	}()
-	return
+	}
+
 }
