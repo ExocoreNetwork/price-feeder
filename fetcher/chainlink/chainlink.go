@@ -2,10 +2,12 @@ package chainlink
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/big"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -18,41 +20,56 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// Start runs the background routine to fetch prices
-// func Fetch(source, token, cfgPath string) (*types.PriceInfo, error) {
-func Fetch(source, token string) (*types.PriceInfo, error) {
+var rpcURL string
+var feedAddress map[string]string
+var client *ethclient.Client
+
+const source = "chainlink"
+
+func init() {
 	// Read the .env file
 	err := godotenv.Load(".env_" + source)
 	if err != nil {
 		log.Println(err)
-		return nil, err
+		panic(err)
 	}
 
 	// Fetch the rpc_url.
-	rpcUrl := os.Getenv("RPC_URL")
-	if len(rpcUrl) == 0 {
+	rpcURL = os.Getenv("RPC_URL")
+	if len(rpcURL) == 0 {
 		log.Fatal("rpcUrl is empty. check the .env file")
 	}
 
-	// Assign default values to feedAddress, and update value if a feed address was passed in the command line.
-	//feedAddress := os.Getenv("DEFAULT_FEED_ADDR")
-	feedAddress := os.Getenv(token)
-
 	// Initialize client instance using the rpcUrl.
-	client, err := ethclient.Dial(rpcUrl)
+	client, err = ethclient.Dial(rpcURL)
 	if err != nil {
 		log.Println(err)
-		return nil, err
+		panic(err)
 	}
 
-	// Test if it is a contract address.
-	ok := isContractAddress(feedAddress, client)
-	if !ok {
-		log.Printf("address %s is not a contract address\n", feedAddress)
-		return nil, err
+	tokens := os.Getenv("TOKEN_ADDRESSES")
+	tokenList := strings.Split(tokens, ",")
+	feedAddress = make(map[string]string)
+	for _, token := range tokenList {
+		tokenParsed := strings.Split(strings.TrimSpace(token), "_")
+		feedAddress[tokenParsed[0]] = tokenParsed[1]
+		if ok := isContractAddress(tokenParsed[1], client); !ok {
+			panic(fmt.Sprintf("address %s is not a contract address\n", feedAddress))
+		}
+		feedAddress[tokenParsed[0]] = tokenParsed[1]
 	}
+}
 
-	chainlinkPriceFeedProxyAddress := common.HexToAddress(feedAddress)
+func updateConfig() {}
+
+// not concurrent safe
+func GetTokenAddress(token string) string {
+	return feedAddress[token]
+}
+
+// Start runs the background routine to fetch prices, we use tokenAddr as input instead of token name to avoid access the list every time which might including potential concurrency conflicts
+func FetchWithContractAddress(tokenAddr string) (*types.PriceInfo, error) {
+	chainlinkPriceFeedProxyAddress := common.HexToAddress(tokenAddr)
 	chainlinkPriceFeedProxy, err := aggregatorv3.NewAggregatorV3Interface(chainlinkPriceFeedProxyAddress, client)
 	if err != nil {
 		log.Println(err)

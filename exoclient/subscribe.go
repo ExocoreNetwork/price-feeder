@@ -12,14 +12,18 @@ import (
 )
 
 const (
-	eventNewBlock = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"tm.event='NewBlock'"}}`
-	maxRetry      = 100
+	subTypeNewBlock = "tm.event='NewBlock'"
+	subTypeTx       = "tm.event='Tx' AND create_price.price_update='success'"
+	sub             = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
+	maxRetry        = 100
 )
 
 var (
-	conn    *websocket.Conn
-	rHeader http.Header
-	host    string
+	conn          *websocket.Conn
+	rHeader       http.Header
+	host          string
+	eventNewBlock = fmt.Sprintf(sub, subTypeNewBlock)
+	eventTx       = fmt.Sprintf(sub, subTypeTx)
 )
 
 type result struct {
@@ -35,14 +39,22 @@ type result struct {
 			} `json:"value"`
 		} `json:"data"`
 		Events struct {
-			Fee []string `json:"fee_market.base_fee"`
+			Fee          []string `json:"fee_market.base_fee"`
+			ParamsUpdate []string `json:"create_price.params_update"`
+			FinalPrice   []string `json:"create_price.final_price"`
+			PriceUpdate  []string `json:"create_price.price_update"`
+			FeederID     []string `json:"create_price.feeder_id"`
 		} `json:"events"`
 	} `json:"result"`
 }
 
 type ReCh struct {
-	Height string
-	Gas    string
+	Height       string
+	Gas          string
+	ParamsUpdate bool
+	// feederID_price_decimal
+	Price []string
+	// FeederID     string
 }
 
 // setup ws connection, and subscribe newblock events
@@ -126,11 +138,25 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 				fmt.Println("failed to parse response")
 				continue
 			}
-			if len(response.Result.Events.Fee) > 0 {
-				ret <- ReCh{
-					response.Result.Data.Value.Block.Header.Height,
-					response.Result.Events.Fee[0],
+			rec := ReCh{}
+			if response.Result.Query == subTypeNewBlock {
+				rec.Height = response.Result.Data.Value.Block.Header.Height
+				events := response.Result.Events
+				if len(events.Fee) > 0 {
+					rec.Gas = events.Fee[0]
 				}
+				if len(events.ParamsUpdate) > 0 {
+					rec.ParamsUpdate = true
+				}
+				// TODO: for oracle v1, this should not happen, since this event only emitted in tx, But if we add more modes to support final price generation in endblock, this would be necessaray.
+				//				if events.PriceUpdate == "success"{}
+				ret <- rec
+				// } else if response.Result.Query == "tm.event='Tx' AND create_price.price_update='success'" { //"tm.event='Tx'" {
+			} else if response.Result.Query == subTypeTx { //"tm.event='Tx'" {
+				// as we filtered for price_udpate=success, this means price has been updated this block
+				events := response.Result.Events
+				rec.Price = events.FinalPrice
+				ret <- rec
 			}
 			select {
 			case <-stop:
@@ -140,6 +166,10 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 		}
 	}()
 
+	// write message to subscribe tx event
+	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventTx)); err != nil {
+		panic("fail to subscribe event_tx")
+	}
 	// write message to subscribe newBlock event
 	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventNewBlock)); err != nil {
 		panic("fail to subscribe event")

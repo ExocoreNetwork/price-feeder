@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	"github.com/ExocoreNetwork/price-feeder/exoclient"
 	"github.com/ExocoreNetwork/price-feeder/fetcher"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
@@ -20,14 +21,61 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type feederParams struct {
+	startBlock uint64
+	endBlock   uint64
+	interval   uint64
+	decimal    int32
+	tokenIDStr string
+	feederID   int64
+}
+type eventRes struct {
+	height  uint64
+	gas     int64
+	price   string
+	decimal int
+	params  *feederParams
+}
+
+type feederInfo struct {
+	params      *feederParams
+	latestPrice string
+	//	paramsUpdate chan *feederParams
+	//	priceUpdate chan string
+	updateCh chan eventRes
+}
+
+func (f *feederParams) update(p oracletypes.Params) (updated bool) {
+	tokenFeeder := p.TokenFeeders[f.feederID]
+	if tokenFeeder.StartBaseBlock != f.startBlock {
+		f.startBlock = tokenFeeder.StartBaseBlock
+		updated = true
+	}
+	if tokenFeeder.EndBlock != f.endBlock {
+		f.endBlock = tokenFeeder.EndBlock
+		updated = true
+	}
+	if tokenFeeder.Interval != f.interval {
+		f.interval = tokenFeeder.Interval
+		updated = true
+	}
+	if p.Tokens[tokenFeeder.TokenID].Decimal != f.decimal {
+		f.decimal = p.Tokens[tokenFeeder.TokenID].Decimal
+		updated = true
+	}
+	return
+}
+
 const (
 	statusOk     = 0
 	privFile     = "priv_validator_key.json"
 	baseCurrency = "USDT"
 )
 
-// var mnemonic = ""
-var mnemonic string
+var (
+	mnemonic       string
+	runningFeeders = make(map[int64]*feederInfo)
+)
 
 type PrivValidatorKey struct {
 	Address string `json:"address"`
@@ -51,7 +99,7 @@ to quickly create a Cobra application.`,
 		f := fetcher.Init(Conf.Sources, Conf.Tokens)
 		// start all supported sources and tokens
 		_ = f.StartAll()
-		pChan := make(chan *types.PriceInfo)
+		// pChan := make(chan *types.PriceInfo)
 		time.Sleep(5 * time.Second)
 
 		confExocore := Conf.Exocore
@@ -87,12 +135,6 @@ to quickly create a Cobra application.`,
 		if err != nil {
 			log.Fatalf("Fail to get oracle params:%s", err)
 		}
-
-		liveFeeders := []chan struct {
-			h uint64
-			g int64
-		}{}
-
 		// check all live feeders and set seperate routine to udpate prices
 		for feederID, feeder := range oracleP.TokenFeeders {
 			if feederID == 0 {
@@ -104,33 +146,61 @@ to quickly create a Cobra application.`,
 			interval := feeder.Interval
 			for _, token := range Conf.Tokens {
 				if token == oracleP.Tokens[feeder.TokenID].Name+baseCurrency {
-					trigger := make(chan struct {
-						h uint64
-						g int64
-					}, 3)
-					liveFeeders = append(liveFeeders, trigger)
+					trigger := make(chan eventRes, 3)
 					decimal := oracleP.Tokens[feeder.TokenID].Decimal
-					go func(feederID, startBlock, interval, startRoundID uint64, decimal int) {
+					runningFeeders[int64(feederID)] = &feederInfo{
+						params: &feederParams{
+							startBlock: feeder.StartBaseBlock,
+							endBlock:   feeder.EndBlock,
+							interval:   feeder.Interval,
+							decimal:    decimal,
+							tokenIDStr: strconv.FormatInt(int64(feeder.TokenID), 10),
+							feederID:   int64(feederID),
+						},
+						updateCh: trigger,
+					}
+					go func(feederID, startBlock, endBlock, interval, startRoundID uint64, decimal int, token string, triggerCh chan eventRes) {
+						pChan := make(chan *types.PriceInfo)
 						prevPrice := ""
-						for t := range trigger {
+						prevDecimal := -1
+						for t := range triggerCh {
+							// update latest price if changed
+							// TODO: for restart price-feeder, this will cause lots of unacceptable messages to be sent, do initialization for these prev values
+							if len(t.price) > 0 {
+								prevPrice = t.price
+								prevDecimal = t.decimal
+							}
+
+							// update Params if changed, paramsUpdate will be notified to corresponding feeder, not all
+							if params := t.params; params != nil {
+								startBlock = params.startBlock
+								endBlock = params.endBlock
+								interval = params.interval
+								decimal = int(params.decimal)
+							}
+
+							// check feeder status to feed price
 							log.Printf("debug-feeder. triggered, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}", feederID, startBlock, interval, startRoundID)
-							if t.h < startBlock {
+							if t.height < startBlock {
 								continue
 							}
-							delta := (t.h - startBlock) % interval
-							roundID := (t.h-startBlock)/interval + startRoundID
+							if endBlock > 0 && t.height >= endBlock {
+								// TODO: notify corresponding token fetcher
+								return
+							}
+							delta := (t.height - startBlock) % interval
+							roundID := (t.height-startBlock)/interval + startRoundID
 							if delta < 3 {
 								// TODO: use source based on oracle-params
 								f.GetLatestPriceFromSourceToken(Conf.Sources[0], token, pChan)
 								p := <-pChan
 								// TODO: this price should be compared with the current price from oracle, not from source
-								if prevPrice == p.Price {
+								if prevDecimal > -1 && prevPrice == p.Price && prevDecimal == p.Decimal {
 									// if prevPrice not changed between different rounds, we don't submit any messages and the oracle module will use the price from former round to update next round.
 									log.Println("price not changed, skip submitting price for roundID:", roundID)
 									continue
 								}
-								prevPrice = p.Price
-								basedBlock := t.h - delta
+								basedBlock := t.height - delta
 
 								if p.Decimal > decimal {
 									p.Price = p.Price[:len(p.Price)-int(p.Decimal-decimal)]
@@ -139,35 +209,66 @@ to quickly create a Cobra application.`,
 									p.Price = p.Price + strings.Repeat("0", decimal-p.Decimal)
 									p.Decimal = decimal
 								}
-								log.Printf("submit price=%s decimal=%d of token=%s on height=%d for roundID:%d", p.Price, p.Decimal, token, t.h, roundID)
-								res := exoclient.SendTx(cc, feederID, basedBlock, p.Price, p.RoundID, p.Decimal, int32(delta)+1, t.g)
+								log.Printf("submit price=%s decimal=%d of token=%s on height=%d for roundID:%d", p.Price, p.Decimal, token, t.height, roundID)
+								res := exoclient.SendTx(cc, feederID, basedBlock, p.Price, p.RoundID, p.Decimal, int32(delta)+1, t.gas)
 								txResponse := res.GetTxResponse()
 								if txResponse.Code == statusOk {
 									log.Println("sendTx successed")
 								} else {
-									prevPrice = ""
 									log.Printf("sendTx failed, response:%v", txResponse)
 								}
 							}
 						}
-					}(uint64(feederID), startBlock, interval, startRoundID, int(decimal))
+					}(uint64(feederID), startBlock, 0, interval, startRoundID, int(decimal), token, trigger)
 					break
 				}
 			}
 		}
-
 		// subscribe newBlock to to trigger tx
 		res, _ := exoclient.Subscriber(confExocore.Ws.Addr, confExocore.Ws.Endpoint)
 		for r := range res {
-			height, _ := strconv.ParseInt(r.Height, 10, 64)
-			gasPrice, _ := strconv.ParseInt(r.Gas, 10, 64)
-			log.Println("debug-newblock-height:", height)
-			for _, t := range liveFeeders {
-				t <- struct {
-					h uint64
-					g int64
-				}{h: uint64(height), g: gasPrice}
+			event := eventRes{}
+			if len(r.Height) > 0 {
+				height, _ := strconv.ParseInt(r.Height, 10, 64)
+				event.height = uint64(height)
 			}
+			if len(r.Gas) > 0 {
+				event.gas, _ = strconv.ParseInt(r.Gas, 10, 64)
+			}
+			if r.ParamsUpdate {
+				oracleP, err = exoclient.GetParams(cc)
+				if err != nil {
+					log.Fatalf("Fail to get oracle params:%s", err)
+					//TODO: retry or ?
+					continue
+				}
+			}
+			for _, fInfo := range runningFeeders {
+				if r.ParamsUpdate {
+					// check if this tokenFeeder's params has been changed
+					//tokenFeeder := oracleP.TokenFeeders[feederID]
+					if update := fInfo.params.update(oracleP); update {
+						paramsCopy := *fInfo.params
+						event.params = &paramsCopy
+					}
+				}
+				for _, p := range r.Price {
+					parsedPrice := strings.Split(p, "_")
+					if fInfo.params.tokenIDStr == parsedPrice[0] {
+						if fInfo.latestPrice == parsedPrice[2]+"_"+parsedPrice[3] {
+							continue
+						}
+						event.price = parsedPrice[2]
+						decimal, _ := strconv.ParseInt(parsedPrice[3], 10, 32)
+						event.decimal = int(decimal)
+						fInfo.latestPrice = parsedPrice[2] + "_" + parsedPrice[3]
+						break
+					}
+				}
+				// notify corresponding feeder to update price
+				fInfo.updateCh <- event
+			}
+
 		}
 	},
 }
