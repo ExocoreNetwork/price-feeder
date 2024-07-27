@@ -6,12 +6,14 @@ require (
 	cosmossdk.io/simapp v0.0.0-20230608160436-666c345ad23d
 	github.com/ExocoreNetwork/exocore v0.1.1
 	github.com/cosmos/cosmos-sdk v0.47.5
+	github.com/cosmos/go-bip39 v1.0.0
 	github.com/ethereum/go-ethereum v1.13.15
 	github.com/evmos/evmos/v14 v14.0.0-rc4
 	github.com/gorilla/websocket v1.5.0
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
+	github.com/stretchr/testify v1.8.4
 	go.uber.org/atomic v1.10.0
 	google.golang.org/grpc v1.59.0
 )
@@ -54,7 +56,6 @@ require (
 	github.com/confio/ics23/go v0.9.0 // indirect
 	github.com/cosmos/btcutil v1.0.5 // indirect
 	github.com/cosmos/cosmos-proto v1.0.0-beta.3 // indirect
-	github.com/cosmos/go-bip39 v1.0.0 // indirect
 	github.com/cosmos/gogogateway v1.2.0 // indirect
 	github.com/cosmos/gogoproto v1.4.11 // indirect
 	github.com/cosmos/iavl v0.20.0 // indirect
@@ -178,7 +179,6 @@ require (
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/status-im/keycard-go v0.2.0 // indirect
-	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/supranational/blst v0.3.11 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
@@ -229,7 +229,7 @@ replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 	// use Cosmos-SDK fork to enable Ledger functionality
-	github.com/cosmos/cosmos-sdk => github.com/evmos/cosmos-sdk v0.47.4-evmos.2
+	github.com/cosmos/cosmos-sdk => github.com/evmos/cosmos-sdk v0.47.5-evmos.2
 	//fix cosmos-sdk error
 	github.com/cosmos/gogoproto => github.com/cosmos/gogoproto v1.4.10
 	// use Evmos geth fork

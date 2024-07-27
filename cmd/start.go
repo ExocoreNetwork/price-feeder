@@ -159,11 +159,16 @@ to quickly create a Cobra application.`,
 						},
 						updateCh: trigger,
 					}
-					go func(feederID, startBlock, endBlock, interval, startRoundID uint64, decimal int, token string, triggerCh chan eventRes) {
+					go func(feederID, startBlock, endBlock, interval, startRoundID uint64, decimal int, token string, triggerCh chan eventRes, tokenID uint64) {
 						pChan := make(chan *types.PriceInfo)
 						prevPrice := ""
 						prevDecimal := -1
 						prevHeight := uint64(0)
+						// if priceLatest, err := exoclient.GetLatestPrice(cc, tokenID); err == nil {
+						// 	prevPrice = priceLatest.Price
+						// 	prevDecimal = int(priceLatest.Decimal)
+						// }
+
 						for t := range triggerCh {
 							// update Params if changed, paramsUpdate will be notified to corresponding feeder, not all
 							if params := t.params; params != nil {
@@ -227,7 +232,7 @@ to quickly create a Cobra application.`,
 								}
 							}
 						}
-					}(uint64(feederID), startBlock, 0, interval, startRoundID, int(decimal), token, trigger)
+					}(uint64(feederID), startBlock, 0, interval, startRoundID, int(decimal), token, trigger, feeder.TokenID)
 					break
 				}
 			}
