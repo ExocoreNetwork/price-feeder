@@ -16,6 +16,7 @@ const (
 	subTypeTx       = "tm.event='Tx' AND create_price.price_update='success'"
 	sub             = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
 	maxRetry        = 100
+	success         = "success"
 )
 
 var (
@@ -31,6 +32,9 @@ type result struct {
 		Query string `json:"query"`
 		Data  struct {
 			Value struct {
+				TxResult struct {
+					Height string `json:"height"`
+				} `json:"TxResult"`
 				Block struct {
 					Header struct {
 						Height string `json:"height"`
@@ -44,6 +48,7 @@ type result struct {
 			FinalPrice   []string `json:"create_price.final_price"`
 			PriceUpdate  []string `json:"create_price.price_update"`
 			FeederID     []string `json:"create_price.feeder_id"`
+			FeederIDs    []string `json:"create_price.feeder_ids"`
 		} `json:"events"`
 	} `json:"result"`
 }
@@ -52,9 +57,9 @@ type ReCh struct {
 	Height       string
 	Gas          string
 	ParamsUpdate bool
-	// feederID_price_decimal
-	Price []string
-	// FeederID     string
+	Price        []string
+	FeederIDs    string
+	TxHeight     string
 }
 
 // setup ws connection, and subscribe newblock events
@@ -149,13 +154,15 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 					rec.ParamsUpdate = true
 				}
 				// TODO: for oracle v1, this should not happen, since this event only emitted in tx, But if we add more modes to support final price generation in endblock, this would be necessaray.
-				//				if events.PriceUpdate == "success"{}
+				if len(events.PriceUpdate) > 0 && events.PriceUpdate[0] == success {
+					rec.FeederIDs = events.FeederIDs[0]
+				}
 				ret <- rec
-				// } else if response.Result.Query == "tm.event='Tx' AND create_price.price_update='success'" { //"tm.event='Tx'" {
-			} else if response.Result.Query == subTypeTx { //"tm.event='Tx'" {
+			} else if response.Result.Query == subTypeTx {
 				// as we filtered for price_udpate=success, this means price has been updated this block
 				events := response.Result.Events
 				rec.Price = events.FinalPrice
+				rec.TxHeight = response.Result.Data.Value.TxResult.Height
 				ret <- rec
 			}
 			select {

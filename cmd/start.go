@@ -30,19 +30,19 @@ type feederParams struct {
 	feederID   int64
 }
 type eventRes struct {
-	height  uint64
-	gas     int64
-	price   string
-	decimal int
-	params  *feederParams
+	height       uint64
+	txHeight     uint64
+	gas          int64
+	price        string
+	decimal      int
+	params       *feederParams
+	priceUpdated bool
 }
 
 type feederInfo struct {
 	params      *feederParams
 	latestPrice string
-	//	paramsUpdate chan *feederParams
-	//	priceUpdate chan string
-	updateCh chan eventRes
+	updateCh    chan eventRes
 }
 
 func (f *feederParams) update(p oracletypes.Params) (updated bool) {
@@ -163,14 +163,8 @@ to quickly create a Cobra application.`,
 						pChan := make(chan *types.PriceInfo)
 						prevPrice := ""
 						prevDecimal := -1
+						prevHeight := uint64(0)
 						for t := range triggerCh {
-							// update latest price if changed
-							// TODO: for restart price-feeder, this will cause lots of unacceptable messages to be sent, do initialization for these prev values
-							if len(t.price) > 0 {
-								prevPrice = t.price
-								prevDecimal = t.decimal
-							}
-
 							// update Params if changed, paramsUpdate will be notified to corresponding feeder, not all
 							if params := t.params; params != nil {
 								startBlock = params.startBlock
@@ -179,9 +173,23 @@ to quickly create a Cobra application.`,
 								decimal = int(params.decimal)
 							}
 
+							// update latest price if changed
+							// TODO: for restart price-feeder, this will cause lots of unacceptable messages to be sent, do initialization for these prev values
+							if len(t.price) > 0 {
+								prevPrice = t.price
+								prevDecimal = t.decimal
+								prevHeight = t.txHeight
+								// this is an tx event with height==0, so just don't submit any messages, tx will be triggered by newBlock event
+								continue
+							} else if t.priceUpdated && prevHeight < t.height {
+								// this is an newblock event and this case is: newBlock event arrived before tx event, (interval>=2*maxNonce, so interval must > 1, so we skip one block is safe)
+								// wait txEvent to update the price
+								continue
+							}
 							// check feeder status to feed price
-							log.Printf("debug-feeder. triggered, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}", feederID, startBlock, interval, startRoundID)
+							log.Printf("debug-feeder. triggered, height:%d, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}, txPrice:%s:", t.height, feederID, startBlock, interval, startRoundID, t.price)
 							if t.height < startBlock {
+								// tx event will have zero height, just don't submit price
 								continue
 							}
 							if endBlock > 0 && t.height >= endBlock {
@@ -228,9 +236,9 @@ to quickly create a Cobra application.`,
 		res, _ := exoclient.Subscriber(confExocore.Ws.Addr, confExocore.Ws.Endpoint)
 		for r := range res {
 			event := eventRes{}
+			var feederIDs []string
 			if len(r.Height) > 0 {
-				height, _ := strconv.ParseInt(r.Height, 10, 64)
-				event.height = uint64(height)
+				event.height, _ = strconv.ParseUint(r.Height, 10, 64)
 			}
 			if len(r.Gas) > 0 {
 				event.gas, _ = strconv.ParseInt(r.Gas, 10, 64)
@@ -242,6 +250,9 @@ to quickly create a Cobra application.`,
 					//TODO: retry or ?
 					continue
 				}
+			}
+			if len(r.FeederIDs) > 0 {
+				feederIDs = strings.Split(r.FeederIDs, "_")
 			}
 			for _, fInfo := range runningFeeders {
 				if r.ParamsUpdate {
@@ -255,16 +266,23 @@ to quickly create a Cobra application.`,
 				for _, p := range r.Price {
 					parsedPrice := strings.Split(p, "_")
 					if fInfo.params.tokenIDStr == parsedPrice[0] {
-						if fInfo.latestPrice == parsedPrice[2]+"_"+parsedPrice[3] {
-							continue
+						if fInfo.latestPrice != parsedPrice[2]+"_"+parsedPrice[3] {
+							event.price = parsedPrice[2]
+							decimal, _ := strconv.ParseInt(parsedPrice[3], 10, 32)
+							event.decimal = int(decimal)
+							event.txHeight, _ = strconv.ParseUint(r.TxHeight, 10, 64)
+							fInfo.latestPrice = parsedPrice[2] + "_" + parsedPrice[3]
 						}
-						event.price = parsedPrice[2]
-						decimal, _ := strconv.ParseInt(parsedPrice[3], 10, 32)
-						event.decimal = int(decimal)
-						fInfo.latestPrice = parsedPrice[2] + "_" + parsedPrice[3]
 						break
 					}
 				}
+
+				for _, feedderID := range feederIDs {
+					if feedderID == strconv.FormatInt(fInfo.params.feederID, 10) {
+						event.priceUpdated = true
+					}
+				}
+
 				// notify corresponding feeder to update price
 				fInfo.updateCh <- event
 			}
