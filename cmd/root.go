@@ -12,7 +12,8 @@ import (
 )
 
 var cfgFile string
-var Conf Config
+var conf Config
+var sourcesPath string
 
 type Config struct {
 	Sources []string `mapstructure:"sources"`
@@ -64,6 +65,7 @@ func init() {
 	// will be global for your application.
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.price-feeder.yaml)")
+	rootCmd.PersistentFlags().StringVar(&sourcesPath, "sources", "", "config file of sources(default is $HOME/.xx.yaml)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -86,11 +88,9 @@ func initConfig() {
 		viper.SetConfigName(".price-feeder")
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
-
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
-	viper.Unmarshal(&Conf)
+	viper.Unmarshal(&conf)
 }

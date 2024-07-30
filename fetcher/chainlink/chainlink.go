@@ -7,11 +7,12 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v2"
 
 	aggregatorv3 "github.com/ExocoreNetwork/price-feeder/fetcher/chainlink/aggregatorv3"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
@@ -21,77 +22,61 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// var rpcURLMainnet, rpcURLSepolia string
-
 // token->contract address
-// var feedAddress map[string]string
-// var clientMainnet, clientSepolia *ethclient.Client
+type config struct {
+	URLs     map[string]string `yaml:"urls"`
+	Tokens   map[string]string `yaml:"tokens"`
+	TokenNet []string          `yaml:"tokenNet"`
+}
 
 var (
-	networks = []string{"MAINNET", "SEPOLIA"}
+	clients = make(map[string]*ethclient.Client)
 	// token-> proxycontract
 	chainlinkProxy = make(map[string]*aggregatorv3.AggregatorV3Interface)
-	tokenNetwork   = make(map[string]string)
-	clients        = make(map[string]*ethclient.Client)
 )
 
-// type network string
-
 const (
-	envConf           = ".env_chainlink"
-	envTokenAddresses = "TOKEN_ADDRESSES"
-	envTokenNetwork   = "TOKEN_NET"
-	envURLPrefix      = "RPC_URL_"
+	envConf = ".env_chainlink.yaml"
 )
 
 func init() {
-	// Read the .env file
-	// err := godotenv.Load(".env_" + source)
-	err := godotenv.Load(envConf)
-	if err != nil {
-		log.Println(err)
-		panic(err)
-	}
+	types.InitFetchers[types.Chainlink] = Init
+}
 
-	// Fetch the rpc_url.
-	for _, net := range networks {
-		netStr := os.Getenv(envURLPrefix + net)
-		if len(netStr) == 0 {
+func Init(confPath string) error {
+	yamlFile, err := os.Open(path.Join(confPath, envConf))
+	if err != nil {
+		return err
+	}
+	cfg := config{}
+	if err = yaml.NewDecoder(yamlFile).Decode(&cfg); err != nil {
+		return err
+	}
+	for network, url := range cfg.URLs {
+		if len(url) == 0 {
 			log.Fatal("rpcUrl is empty. check the .env file")
 		}
-		clients[net], err = ethclient.Dial(netStr)
+		clients[network], err = ethclient.Dial(url)
 		if err != nil {
 			panic(err)
 		}
 	}
-
-	tokenNetworks := strings.Split(os.Getenv(envTokenNetwork), ",")
-	for _, tn := range tokenNetworks {
-		tnParsed := strings.Split(strings.TrimSpace(tn), "_")
-		tokenNetwork[tnParsed[0]] = tnParsed[1]
-	}
-
-	//	feedAddress = make(map[string]string)
-	tokens := os.Getenv(envTokenAddresses)
-	tokenList := strings.Split(tokens, ",")
-
-	for _, token := range tokenList {
-		tokenParsed := strings.Split(strings.TrimSpace(token), "_")
-		net := tokenNetwork[tokenParsed[0]]
-
-		if ok := isContractAddress(tokenParsed[1], clients[net]); !ok {
-			panic(fmt.Sprintf("address %s is not a contract address\n", tokenParsed[1]))
+	for token, address := range cfg.Tokens {
+		addrParsed := strings.Split(strings.TrimSpace(address), "_")
+		if ok := isContractAddress(addrParsed[0], clients[addrParsed[1]]); !ok {
+			panic(fmt.Sprintf("address %s is not a contract address\n", addrParsed[0]))
 		}
-		if chainlinkProxy[tokenParsed[0]], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(tokenParsed[1]), clients[net]); err != nil {
+		if chainlinkProxy[token], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(addrParsed[0]), clients[addrParsed[1]]); err != nil {
 			panic(err)
 		}
 	}
+	types.Fetchers[types.Chainlink] = Fetch
+	return nil
 }
 
 // func updateConfig() {}
 
 // Start runs the background routine to fetch prices, we use tokenAddr as input instead of token name to avoid access the list every time which might including potential concurrency conflicts
-// func FetchWithContractAddress(tokenAddr string) (*types.PriceInfo, error) {
 func Fetch(token string) (*types.PriceInfo, error) {
 	chainlinkPriceFeedProxy, ok := chainlinkProxy[token]
 	if !ok {
@@ -150,7 +135,6 @@ func isContractAddress(addr string, client *ethclient.Client) bool {
 	address := common.HexToAddress(addr)
 	bytecode, err := client.CodeAt(context.Background(), address, nil) // nil is latest block
 	if err != nil {
-		fmt.Println("------")
 		log.Fatal(err)
 	}
 	isContract := len(bytecode) > 0

@@ -4,34 +4,31 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"reflect"
 	"sync"
 	"time"
 
 	"go.uber.org/atomic"
 
-	"github.com/ExocoreNetwork/price-feeder/fetcher/chainlink"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
 )
 
 var sourcesMap sync.Map
 var tokensMap sync.Map
 
-// type tokenSet []*token
-// type sourceSet []*source
-
-// var sources sourceSet
-// var tokens tokenSet
-
-func Init(sourcesIn, tokensIn []string) *Fetcher {
+func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 	sourceIDs := make([]string, 0)
 	for _, tName := range tokensIn {
-		// tokens = append(tokens, &token{name: s, active: true})
 		tokensMap.Store(tName, &token{name: tName, active: true})
 	}
 	for _, sName := range sourcesIn {
 		s := &source{name: sName, tokens: &sync.Map{}, running: atomic.NewInt32(-1), stopCh: make(chan struct{}), stopResCh: make(chan struct{})}
+
+		// init source's fetcher
+		reflect.ValueOf(types.InitFetchers[sName]).Call([]reflect.Value{reflect.ValueOf(sourcesPath)})
+		s.fetch = reflect.ValueOf(types.Fetchers[sName]).Interface().(types.FType)
+
 		for _, tName := range tokensIn {
-			// s.tokens.Store(tName, &types.PriceSync{})
 			s.tokens.Store(tName, types.NewPriceSyc())
 		}
 		sourcesMap.Store(sName, s)
@@ -114,6 +111,8 @@ type source struct {
 	//endpoint string
 	// indicates the work status
 	// working *atomic.Bool
+	// fetch func(token string) (*types.PriceInfo, error)
+	fetch types.FType
 }
 
 // set source's status as working
@@ -157,39 +156,35 @@ func (s *source) AddToken(name string) bool {
 }
 
 func (s *source) Fetch(interval time.Duration) {
-	switch s.name {
-	case "chainlink":
-		// Fetch start all tokens and this will happen before any modify with the tokens maps, so there will actually have no conflicts at all
-		s.tokens.Range(func(key, value any) bool {
-			tName := key.(string)
-			priceInfo := value.(*types.PriceSync)
-			if tokenAny, found := tokensMap.Load(tName); found && tokenAny.(*token).active {
-				s.lock.Lock()
-				s.running.Inc()
-				s.lock.Unlock()
-				go func(tName string) {
-					tic := time.NewTimer(interval)
-					for {
-						select {
-						case <-tic.C:
-							price, err := chainlink.Fetch(tName)
-							prevPrice := priceInfo.GetInfo()
-							if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
-								priceInfo.UpdateInfo(price)
-								log.Printf("update token:%s, price:%s, decimal:%d", tName, price.Price, price.Decimal)
-							}
-						case <-s.stopCh:
-							if zero := s.running.Dec(); zero == 0 {
-								close(s.stopResCh)
-							}
-							return
+	s.tokens.Range(func(key, value any) bool {
+		tName := key.(string)
+		priceInfo := value.(*types.PriceSync)
+		if tokenAny, found := tokensMap.Load(tName); found && tokenAny.(*token).active {
+			s.lock.Lock()
+			s.running.Inc()
+			s.lock.Unlock()
+			go func(tName string) {
+				tic := time.NewTimer(interval)
+				for {
+					select {
+					case <-tic.C:
+						price, err := s.fetch(tName)
+						prevPrice := priceInfo.GetInfo()
+						if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
+							priceInfo.UpdateInfo(price)
+							log.Printf("update token:%s, price:%s, decimal:%d", tName, price.Price, price.Decimal)
 						}
+					case <-s.stopCh:
+						if zero := s.running.Dec(); zero == 0 {
+							close(s.stopResCh)
+						}
+						return
 					}
-				}(tName)
-			}
-			return true
-		})
-	}
+				}
+			}(tName)
+		}
+		return true
+	})
 }
 
 type token struct {

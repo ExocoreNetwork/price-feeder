@@ -96,13 +96,13 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// start fetcher to get prices from chainlink
-		f := fetcher.Init(Conf.Sources, Conf.Tokens)
+		f := fetcher.Init(conf.Sources, conf.Tokens, sourcesPath)
 		// start all supported sources and tokens
 		_ = f.StartAll()
 		time.Sleep(5 * time.Second)
 
-		confExocore := Conf.Exocore
-		confSender := Conf.Sender
+		confExocore := conf.Exocore
+		confSender := conf.Sender
 		privBase64 := ""
 
 		// if mnemonic is not set from flag, then check config file to find if there is mnemonic configured
@@ -146,7 +146,7 @@ to quickly create a Cobra application.`,
 			startBlock := feeder.StartBaseBlock
 			startRoundID := feeder.StartRoundID
 			interval := feeder.Interval
-			for _, token := range Conf.Tokens {
+			for _, token := range conf.Tokens {
 				if token == oracleP.Tokens[feeder.TokenID].Name+baseCurrency {
 					trigger := make(chan eventRes, 3)
 					decimal := oracleP.Tokens[feeder.TokenID].Decimal
@@ -203,7 +203,7 @@ to quickly create a Cobra application.`,
 							roundID := (t.height-startBlock)/interval + startRoundID
 							if delta < 3 {
 								// TODO: use source based on oracle-params
-								f.GetLatestPriceFromSourceToken(Conf.Sources[0], token, pChan)
+								f.GetLatestPriceFromSourceToken(conf.Sources[0], token, pChan)
 								p := <-pChan
 								// TODO: this price should be compared with the current price from oracle, not from source
 								if prevDecimal > -1 && prevPrice == p.Price && prevDecimal == p.Decimal {

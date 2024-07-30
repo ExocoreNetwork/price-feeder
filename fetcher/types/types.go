@@ -2,6 +2,18 @@ package types
 
 import "sync"
 
+const (
+	Chainlink = "chainlink"
+)
+
+type FType func(string) (*PriceInfo, error)
+
+// var Fetchers = make(map[string]func(string) (*PriceInfo, error))
+var Fetchers = make(map[string]FType)
+
+// TODO Init fetchers
+var InitFetchers = make(map[string]func(string) error)
+
 type PriceInfo struct {
 	Price     string
 	Decimal   int
