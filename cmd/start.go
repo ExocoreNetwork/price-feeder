@@ -99,7 +99,6 @@ to quickly create a Cobra application.`,
 		f := fetcher.Init(Conf.Sources, Conf.Tokens)
 		// start all supported sources and tokens
 		_ = f.StartAll()
-		// pChan := make(chan *types.PriceInfo)
 		time.Sleep(5 * time.Second)
 
 		confExocore := Conf.Exocore
@@ -132,8 +131,11 @@ to quickly create a Cobra application.`,
 		cc := exoclient.CreateGrpcConn(confExocore.Rpc)
 		defer cc.Close()
 		oracleP, err := exoclient.GetParams(cc)
-		if err != nil {
-			log.Fatalf("Fail to get oracle params:%s", err)
+		for err != nil {
+			// retry forever until be interrupted manually
+			log.Println("Fail to get oracle params on star, retrying...", err)
+			time.Sleep(2 * time.Second)
+			oracleP, err = exoclient.GetParams(cc)
 		}
 		// check all live feeders and set seperate routine to udpate prices
 		for feederID, feeder := range oracleP.TokenFeeders {
@@ -164,10 +166,6 @@ to quickly create a Cobra application.`,
 						prevPrice := ""
 						prevDecimal := -1
 						prevHeight := uint64(0)
-						// if priceLatest, err := exoclient.GetLatestPrice(cc, tokenID); err == nil {
-						// 	prevPrice = priceLatest.Price
-						// 	prevDecimal = int(priceLatest.Decimal)
-						// }
 
 						for t := range triggerCh {
 							// update Params if changed, paramsUpdate will be notified to corresponding feeder, not all
@@ -250,10 +248,11 @@ to quickly create a Cobra application.`,
 			}
 			if r.ParamsUpdate {
 				oracleP, err = exoclient.GetParams(cc)
-				if err != nil {
-					log.Fatalf("Fail to get oracle params:%s", err)
-					//TODO: retry or ?
-					continue
+				for err != nil {
+					// retry forever until be interrupted manually
+					log.Println("Fail to get oracle params when params update detected, retrying...", err)
+					oracleP, err = exoclient.GetParams(cc)
+					time.Sleep(2 * time.Second)
 				}
 			}
 			if len(r.FeederIDs) > 0 {

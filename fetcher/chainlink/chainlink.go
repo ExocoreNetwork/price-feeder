@@ -2,6 +2,7 @@ package chainlink
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -20,60 +21,82 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-var rpcURL string
-var feedAddress map[string]string
-var client *ethclient.Client
+// var rpcURLMainnet, rpcURLSepolia string
 
-const source = "chainlink"
+// token->contract address
+// var feedAddress map[string]string
+// var clientMainnet, clientSepolia *ethclient.Client
+
+var (
+	networks = []string{"MAINNET", "SEPOLIA"}
+	// token-> proxycontract
+	chainlinkProxy = make(map[string]*aggregatorv3.AggregatorV3Interface)
+	tokenNetwork   = make(map[string]string)
+	clients        = make(map[string]*ethclient.Client)
+)
+
+// type network string
+
+const (
+	envConf           = ".env_chainlink"
+	envTokenAddresses = "TOKEN_ADDRESSES"
+	envTokenNetwork   = "TOKEN_NET"
+	envURLPrefix      = "RPC_URL_"
+)
 
 func init() {
 	// Read the .env file
-	err := godotenv.Load(".env_" + source)
+	// err := godotenv.Load(".env_" + source)
+	err := godotenv.Load(envConf)
 	if err != nil {
 		log.Println(err)
 		panic(err)
 	}
 
 	// Fetch the rpc_url.
-	rpcURL = os.Getenv("RPC_URL")
-	if len(rpcURL) == 0 {
-		log.Fatal("rpcUrl is empty. check the .env file")
+	for _, net := range networks {
+		netStr := os.Getenv(envURLPrefix + net)
+		if len(netStr) == 0 {
+			log.Fatal("rpcUrl is empty. check the .env file")
+		}
+		clients[net], err = ethclient.Dial(netStr)
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	// Initialize client instance using the rpcUrl.
-	client, err = ethclient.Dial(rpcURL)
-	if err != nil {
-		log.Println(err)
-		panic(err)
+	tokenNetworks := strings.Split(os.Getenv(envTokenNetwork), ",")
+	for _, tn := range tokenNetworks {
+		tnParsed := strings.Split(strings.TrimSpace(tn), "_")
+		tokenNetwork[tnParsed[0]] = tnParsed[1]
 	}
 
-	tokens := os.Getenv("TOKEN_ADDRESSES")
+	//	feedAddress = make(map[string]string)
+	tokens := os.Getenv(envTokenAddresses)
 	tokenList := strings.Split(tokens, ",")
-	feedAddress = make(map[string]string)
+
 	for _, token := range tokenList {
 		tokenParsed := strings.Split(strings.TrimSpace(token), "_")
-		feedAddress[tokenParsed[0]] = tokenParsed[1]
-		if ok := isContractAddress(tokenParsed[1], client); !ok {
-			panic(fmt.Sprintf("address %s is not a contract address\n", feedAddress))
+		net := tokenNetwork[tokenParsed[0]]
+
+		if ok := isContractAddress(tokenParsed[1], clients[net]); !ok {
+			panic(fmt.Sprintf("address %s is not a contract address\n", tokenParsed[1]))
 		}
-		feedAddress[tokenParsed[0]] = tokenParsed[1]
+		if chainlinkProxy[tokenParsed[0]], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(tokenParsed[1]), clients[net]); err != nil {
+			panic(err)
+		}
 	}
 }
 
-func updateConfig() {}
-
-// not concurrent safe
-func GetTokenAddress(token string) string {
-	return feedAddress[token]
-}
+// func updateConfig() {}
 
 // Start runs the background routine to fetch prices, we use tokenAddr as input instead of token name to avoid access the list every time which might including potential concurrency conflicts
-func FetchWithContractAddress(tokenAddr string) (*types.PriceInfo, error) {
-	chainlinkPriceFeedProxyAddress := common.HexToAddress(tokenAddr)
-	chainlinkPriceFeedProxy, err := aggregatorv3.NewAggregatorV3Interface(chainlinkPriceFeedProxyAddress, client)
-	if err != nil {
-		log.Println(err)
-		return nil, err
+// func FetchWithContractAddress(tokenAddr string) (*types.PriceInfo, error) {
+func Fetch(token string) (*types.PriceInfo, error) {
+	chainlinkPriceFeedProxy, ok := chainlinkProxy[token]
+	if !ok {
+		log.Printf("token %s not found\n", token)
+		return nil, errors.New("token not found")
 	}
 
 	roundData, err := chainlinkPriceFeedProxy.LatestRoundData(&bind.CallOpts{})
@@ -127,6 +150,7 @@ func isContractAddress(addr string, client *ethclient.Client) bool {
 	address := common.HexToAddress(addr)
 	bytecode, err := client.CodeAt(context.Background(), address, nil) // nil is latest block
 	if err != nil {
+		fmt.Println("------")
 		log.Fatal(err)
 	}
 	isContract := len(bytecode) > 0

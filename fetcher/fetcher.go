@@ -164,16 +164,15 @@ func (s *source) Fetch(interval time.Duration) {
 			tName := key.(string)
 			priceInfo := value.(*types.PriceSync)
 			if tokenAny, found := tokensMap.Load(tName); found && tokenAny.(*token).active {
-				tokenAddr := chainlink.GetTokenAddress(tName)
 				s.lock.Lock()
 				s.running.Inc()
 				s.lock.Unlock()
-				go func(tokenAddr string) {
+				go func(tName string) {
 					tic := time.NewTimer(interval)
 					for {
 						select {
 						case <-tic.C:
-							price, err := chainlink.FetchWithContractAddress(tokenAddr)
+							price, err := chainlink.Fetch(tName)
 							prevPrice := priceInfo.GetInfo()
 							if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
 								priceInfo.UpdateInfo(price)
@@ -186,7 +185,7 @@ func (s *source) Fetch(interval time.Duration) {
 							return
 						}
 					}
-				}(tokenAddr)
+				}(tName)
 			}
 			return true
 		})
