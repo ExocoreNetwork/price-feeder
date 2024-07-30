@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	subTypeNewBlock = "tm.event='NewBlock'"
-	subTypeTx       = "tm.event='Tx' AND create_price.price_update='success'"
-	sub             = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
-	maxRetry        = 100
-	success         = "success"
+	subTypeNewBlock   = "tm.event='NewBlock'"
+	subTypeTx         = "tm.event='Tx' AND create_price.price_update='success'"
+	sub               = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
+	reconnectInterval = 3
+	maxRetry          = 600
+	success           = "success"
 )
 
 var (
@@ -107,8 +108,8 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 				// reconnect ws
 				attempt := 0
 				for ; err != nil; conn, _, err = dialer.Dial("ws://"+host+endpoint, rHeader) {
-					fmt.Println("failed to reconnect, retrying...", attempt)
-					time.Sleep(1 << uint(attempt) * time.Second)
+					fmt.Printf("failed to reconnect with error:%s, retrying...%d", err, attempt)
+					time.Sleep(reconnectInterval * time.Second)
 					attempt++
 					if attempt > maxRetry {
 						fmt.Println("failed to reconnect after max retry")
@@ -129,6 +130,8 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 					if err = conn.WriteMessage(websocket.TextMessage, []byte(eventNewBlock)); err == nil {
 						break
 					}
+					fmt.Printf("failed to subscribe event with error:%s, retrying...%d", err, attempt)
+					time.Sleep(1 * time.Second)
 					attempt++
 				}
 				if attempt == maxRetry {
