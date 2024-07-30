@@ -20,4 +20,4 @@ Or check out the latest release.
 
 # Quick Start
 
-`pricefeeder --config path/to/config start`
+`pricefeeder --config path/to/config --sources path/to/sources/config start -m [mnemonic of validator's consensus key]`
