@@ -147,7 +147,7 @@ to quickly create a Cobra application.`,
 			startRoundID := feeder.StartRoundID
 			interval := feeder.Interval
 			for _, token := range conf.Tokens {
-				if token == oracleP.Tokens[feeder.TokenID].Name+baseCurrency {
+				if strings.EqualFold(token, oracleP.Tokens[feeder.TokenID].Name+baseCurrency) {
 					trigger := make(chan eventRes, 3)
 					decimal := oracleP.Tokens[feeder.TokenID].Decimal
 					runningFeeders[int64(feederID)] = &feederInfo{
