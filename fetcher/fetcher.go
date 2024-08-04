@@ -16,6 +16,7 @@ import (
 var sourcesMap sync.Map
 var tokensMap sync.Map
 
+// Init initializes the fetcher with sources and tokens
 func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 	sourceIDs := make([]string, 0)
 	for _, tName := range tokensIn {
@@ -54,70 +55,22 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 	}
 }
 
-// func (ss *sourceSet) Add(name, endpoint string) bool {
-// 	s, _ := ss.GetByName(name)
-// 	if s != nil {
-// 		return false
-// 	}
-// 	*ss = append(*ss, &source{name: name, tokens: make(map[int]*types.PriceInfo)})
-// 	return true
-// }
-//
-// func (ss sourceSet) GetByName(name string) (*source, int) {
-// 	for id, s := range ss {
-// 		if s.name == name {
-// 			return s, id
-// 		}
-// 	}
-// 	return nil, -1
-// }
-//
-// func (ts tokenSet) GetByName(name string) (*token, int) {
-// 	for id, t := range ts {
-// 		if t.name == name {
-// 			return t, id
-// 		}
-// 	}
-// 	return nil, -1
-// }
-//
-// func (ts *tokenSet) Add(name, endpoint string) bool {
-// 	t, _ := ts.GetByName(name)
-// 	if t != nil {
-// 		return false
-// 	}
-// 	//*ts = append(*ts, &token{name: name, endpoint: endpoint, active: true})
-// 	*ts = append(*ts, &token{name: name, active: true})
-// 	return true
-// }
-
+// source is the data source to fetch token prices
 type source struct {
 	lock      sync.Mutex
 	running   *atomic.Int32
 	stopCh    chan struct{}
 	stopResCh chan struct{}
-	// running []chan struct{}
-	//lock sync.Mutex
 	// source name, should be unique
-	name string
-	// token ids from the token slice
-	//tokens map[int]struct{}
-	//	tokens  map[int]*types.PriceInfo
-	//	tokens map[string]*types.PriceSync
+	name   string
 	tokens *sync.Map
-	// tokensRead map[string]*types.PriceSync
 	// endpoint of the source to retreive the price data; eg. https://rpc.ankr.com/eth  is used for chainlink's ethereum endpoint
 	// might vary for different sources
-	//endpoint string
-	// indicates the work status
-	// working *atomic.Bool
-	// fetch func(token string) (*types.PriceInfo, error)
 	fetch types.FType
 }
 
 // set source's status as working
-// func (s *source) start(interval time.Duration) (bool, chan struct{}) {
-func (s *source) start(interval time.Duration) bool { // (bool, chan struct{}) {
+func (s *source) start(interval time.Duration) bool {
 	s.lock.Lock()
 	if s.running.Load() == -1 {
 		s.stopCh = make(chan struct{})
@@ -150,11 +103,11 @@ func (s *source) stop() bool {
 
 // AddToken not concurrency safe: stop->AddToken->start(all)(/startOne need lock/select to ensure concurrent safe
 func (s *source) AddToken(name string) bool {
-	// _, loaded := s.tokens.LoadOrStore(name, &types.PriceSync{})
 	_, loaded := s.tokens.LoadOrStore(name, types.NewPriceSyc())
 	return !loaded
 }
 
+// Fetch token price from source
 func (s *source) Fetch(interval time.Duration) {
 	s.tokens.Range(func(key, value any) bool {
 		tName := key.(string)
@@ -220,7 +173,7 @@ type Fetcher struct {
 	}
 }
 
-// Start runs the background routine to fetch prices
+// StartAll runs the background routine to fetch prices
 func (f *Fetcher) StartAll() context.CancelFunc {
 	if !f.running.CompareAndSwap(false, true) {
 		return nil
@@ -247,11 +200,11 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 				}
 				return
 
-			// add a new source and start fetching its data
-			case _ = <-f.newSource:
+				// TODO: add a new source and start fetching its data
+			case <-f.newSource:
 
 			// add tokens for a existing source
-			case _ = <-f.configSource:
+			case <-f.configSource:
 				// TODO: we currently don't handle the request like 'remove token', if we do that support, we should take care of the process in reading routine
 			}
 		}
@@ -301,6 +254,7 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 	return cancel
 }
 
+// GetLatestPriceFromSourceToken gets the latest price of a token from a source
 func (f *Fetcher) GetLatestPriceFromSourceToken(source, token string, c chan *types.PriceInfo) {
 	f.getLatestPriceWithSourceToken <- struct {
 		p chan *types.PriceInfo

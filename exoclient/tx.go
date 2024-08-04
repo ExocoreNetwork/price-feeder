@@ -20,7 +20,6 @@ import (
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
 	"cosmossdk.io/simapp/params"
-	//	"github.com/cosmos/cosmos-sdk/codec"
 	cmdcfg "github.com/ExocoreNetwork/exocore/cmd/config"
 	"github.com/cosmos/cosmos-sdk/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"

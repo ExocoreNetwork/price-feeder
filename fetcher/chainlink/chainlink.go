@@ -75,8 +75,6 @@ func Init(confPath string) error {
 	return nil
 }
 
-// func updateConfig() {}
-
 // Start runs the background routine to fetch prices, we use tokenAddr as input instead of token name to avoid access the list every time which might including potential concurrency conflicts
 func Fetch(token string) (*types.PriceInfo, error) {
 	chainlinkPriceFeedProxy, ok := chainlinkProxy[token]
@@ -97,22 +95,6 @@ func Fetch(token string) (*types.PriceInfo, error) {
 		return nil, err
 	}
 
-	//description, err := chainlinkPriceFeedProxy.Description(&bind.CallOpts{})
-	//if err != nil {
-	//	log.Println(err)
-	//	return nil, err
-	//}
-
-	//// Compute a big.int which is 10**decimals.
-	//divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
-
-	//log.Printf("%v Price feed address is  %v\n", description, chainlinkPriceFeedProxyAddress)
-	//log.Printf("Round id is %v\n", roundData.RoundId)
-	//log.Printf("Answer is %v\n", roundData.Answer)
-	//log.Printf("Formatted answer is %v\n", divideBigInt(roundData.Answer, divisor))
-	//log.Printf("Started at %v\n", formatTime(roundData.StartedAt))
-	//log.Printf("Updated at %v\n", formatTime(roundData.UpdatedAt))
-	//log.Printf("Answered in round %v\n", roundData.AnsweredInRound)
 	return &types.PriceInfo{
 		Price:     roundData.Answer.String(),
 		Decimal:   int(decimals),

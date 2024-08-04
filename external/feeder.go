@@ -34,6 +34,7 @@ func StartPriceFeeder(cfgFile, mnemonic, sourcesPath string) bool {
 		panic(err)
 	}
 
+	// Start price feeder
 	cmd.RunPriceFeeder(conf, mnemonic, sourcesPath, false)
 
 	return true

@@ -77,6 +77,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 		startBlock := feeder.StartBaseBlock
 		startRoundID := feeder.StartRoundID
 		interval := feeder.Interval
+		// check if this feeder is supported by this price-feeder
 		for _, token := range conf.Tokens {
 			if strings.EqualFold(token, oracleP.Tokens[feeder.TokenID].Name+baseCurrency) {
 				trigger := make(chan eventRes, 3)
@@ -92,6 +93,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 					},
 					updateCh: trigger,
 				}
+				// start a routine to update price for this feeder
 				go func(feederID, startBlock, endBlock, interval, startRoundID uint64, decimal int, token string, triggerCh chan eventRes, tokenID uint64) {
 					pChan := make(chan *types.PriceInfo)
 					prevPrice := ""

@@ -2,6 +2,7 @@ package cmd
 
 import oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 
+// Define the types for the feeder
 type feederParams struct {
 	startBlock uint64
 	endBlock   uint64
@@ -10,6 +11,8 @@ type feederParams struct {
 	tokenIDStr string
 	feederID   int64
 }
+
+// Define the types for the event
 type eventRes struct {
 	height       uint64
 	txHeight     uint64
@@ -20,6 +23,7 @@ type eventRes struct {
 	priceUpdated bool
 }
 
+// Define the types for the feederInfo
 type feederInfo struct {
 	params      *feederParams
 	latestPrice string

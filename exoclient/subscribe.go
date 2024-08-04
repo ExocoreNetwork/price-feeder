@@ -190,6 +190,7 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 	return
 }
 
+// writeRoutine sends ping messages every 10 second
 func writeRoutine(conn *websocket.Conn, stop chan struct{}) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer func() {
