@@ -18,13 +18,14 @@ func GetParams(grpcConn *grpc.ClientConn) (oracleTypes.Params, error) {
 	return paramsRes.Params, nil
 }
 
-// GetParams queries oracle params
+// TODO: these lines should be active after exocore upgraded
+// GetLatestPrice returns latest price of specific token
 // func GetLatestPrice(grpcConn *grpc.ClientConn, tokenID uint64) (oracleTypes.PriceTimeRound, error) {
-// 	oracleClient := oracleTypes.NewQueryClient(grpcConn)
-// 	priceRes, err := oracleClient.LatestPrice(context.Background(), &oracleTypes.QueryGetLatestPriceRequest{TokenId: tokenID})
-// 	if err != nil {
-// 		return oracleTypes.PriceTimeRound{}, err
-// 	}
-// 	return priceRes.Price, nil
+//	oracleClient := oracleTypes.NewQueryClient(grpcConn)
+//	priceRes, err := oracleClient.LatestPrice(context.Background(), &oracleTypes.QueryGetLatestPriceRequest{TokenId: tokenID})
+//	if err != nil {
+//		return oracleTypes.PriceTimeRound{}, err
+//	}
+//	return priceRes.Price, nil
 //
-// }
+//}

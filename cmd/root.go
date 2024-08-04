@@ -12,26 +12,8 @@ import (
 )
 
 var cfgFile string
-var conf Config
-var sourcesPath string
 
-type Config struct {
-	Sources []string `mapstructure:"sources"`
-	Tokens  []string `mapstructure:"tokens"`
-	Sender  struct {
-		Mnemonic string `mapstructure:"mnemonic"`
-		Path     string `mapstructure:"path"`
-	} `mapstructure:"sender"`
-	Exocore struct {
-		ChainID string `mapstructure:"chainid"`
-		AppName string `mapstructure:"appname"`
-		Rpc     string `mapstructure:"rpc"`
-		Ws      struct {
-			Addr     string `mapstructure:"addr"`
-			Endpoint string `mapstructure:"endpoint"`
-		} `mapstructure:"ws"`
-	} `mapstructure:"exocore"`
-}
+var sourcesPath string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -69,28 +51,32 @@ func init() {
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+
+	startCmd.Flags().StringVarP(&mnemonic, "mnemonic", "m", "", "mnemonic of consensus key")
+
+	rootCmd.AddCommand(startCmd)
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
+	v := viper.New()
 	if cfgFile != "" {
 		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
+		v.SetConfigFile(cfgFile)
 	} else {
 		// Find home directory.
 		home, err := os.UserHomeDir()
 		cobra.CheckErr(err)
 
 		// Search config in home directory with name ".price-feeder" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".price-feeder")
+		v.AddConfigPath(home)
+		v.SetConfigType("yaml")
+		v.SetConfigName(".price-feeder")
 	}
 
 	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	if err := v.ReadInConfig(); err == nil {
+		fmt.Fprintln(os.Stderr, "Using config file:", v.ConfigFileUsed())
 	}
-	viper.Unmarshal(&conf)
+	v.Unmarshal(&conf)
 }

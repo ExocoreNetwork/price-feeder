@@ -49,10 +49,11 @@ var (
 )
 
 // Init intialize the exoclient with configuration including consensuskey info, chainID
-func Init(mnemonic, privBase64, cID string) {
-	config := sdk.GetConfig()
-	cmdcfg.SetBech32Prefixes(config)
-
+func Init(mnemonic, privBase64, cID string, standalone bool) {
+	if standalone {
+		config := sdk.GetConfig()
+		cmdcfg.SetBech32Prefixes(config)
+	}
 	encCfg = encoding.MakeConfig(app.ModuleBasics)
 	txCfg = encCfg.TxConfig
 

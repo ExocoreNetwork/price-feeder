@@ -36,7 +36,8 @@ var (
 )
 
 const (
-	envConf = ".env_chainlink.yaml"
+	// envConf = ".env_chainlink.yaml"
+	envConf = "oracle_env_chainlink.yaml"
 )
 
 func init() {
