@@ -13,7 +13,6 @@ var conf feedertypes.Config
 
 // LoadConf set conf from invoker instead of rootCmd
 func StartPriceFeeder(cfgFile, mnemonic, sourcesPath string) bool {
-	fmt.Println("debug-price-feeder:", cfgFile, mnemonic, sourcesPath)
 	if len(cfgFile) == 0 {
 		return false
 	}
@@ -24,7 +23,6 @@ func StartPriceFeeder(cfgFile, mnemonic, sourcesPath string) bool {
 	// Search config in home directory with name ".price-feeder" (without extension).
 	v.SetConfigType("yaml")
 
-	fmt.Println("deubg-config:", cfgFile)
 	// If a config file is found, read it in.
 	if err := v.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", v.ConfigFileUsed())

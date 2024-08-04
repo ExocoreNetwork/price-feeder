@@ -128,7 +128,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 							continue
 						}
 						// check feeder status to feed price
-						log.Printf("debug-feeder. triggered, height:%d, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}:", t.height, feederID, startBlock, interval, startRoundID)
+						log.Printf("Triggered, height:%d, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}:", t.height, feederID, startBlock, interval, startRoundID)
 						if t.height < startBlock {
 							// tx event will have zero height, just don't submit price
 							continue
