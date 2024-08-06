@@ -99,11 +99,10 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 					prevPrice := ""
 					prevDecimal := -1
 					prevHeight := uint64(0)
-					// TODO: these lines should be active after exocore upgrade
-					//					if p, err := exoclient.GetLatestPrice(cc, tokenID); err == nil {
-					//						prevPrice = p.Price
-					//						prevDecimal = int(p.Decimal)
-					//					}
+					if p, err := exoclient.GetLatestPrice(cc, tokenID); err == nil {
+						prevPrice = p.Price
+						prevDecimal = int(p.Decimal)
+					}
 
 					for t := range triggerCh {
 						// update Params if changed, paramsUpdate will be notified to corresponding feeder, not all
