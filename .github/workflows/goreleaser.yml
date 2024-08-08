@@ -29,8 +29,10 @@ jobs:
           go-version: '1.21.12'
           check-latest: true
       - name: Release dry run
+        if: github.event_name == 'pull_request'
         run: make release-dry-run
       - name: setup release environment
+        if: github.event_name != 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |-
