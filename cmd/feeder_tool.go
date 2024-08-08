@@ -145,7 +145,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 							// TODO: this price should be compared with the current price from oracle, not from source
 							if prevDecimal > -1 && prevPrice == p.Price && prevDecimal == p.Decimal {
 								// if prevPrice not changed between different rounds, we don't submit any messages and the oracle module will use the price from former round to update next round.
-								log.Println("price not changed, skip submitting price for roundID:", roundID)
+								log.Printf("price not changed, skip submitting price for roundID:%d, feederID:%d", roundID, feederID)
 								continue
 							}
 							basedBlock := t.height - delta
@@ -157,13 +157,14 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 								p.Price = p.Price + strings.Repeat("0", decimal-p.Decimal)
 								p.Decimal = decimal
 							}
-							log.Printf("submit price=%s decimal=%d of token=%s on height=%d for roundID:%d", p.Price, p.Decimal, token, t.height, roundID)
+							log.Printf("submit price=%s decimal=%d of token=%s on height=%d for roundID:%d, feederID:%d", p.Price, p.Decimal, token, t.height, roundID, feederID)
 							res := exoclient.SendTx(cc, feederID, basedBlock, p.Price, p.RoundID, p.Decimal, int32(delta)+1, t.gas)
+							res = exoclient.SendTx(cc, feederID, basedBlock, p.Price+"9", p.RoundID, p.Decimal, int32(delta)+2, t.gas)
 							txResponse := res.GetTxResponse()
 							if txResponse.Code == statusOk {
-								log.Println("sendTx successed")
+								log.Printf("sendTx successed, feederID:%d", feederID)
 							} else {
-								log.Printf("sendTx failed, response:%v", txResponse)
+								log.Printf("sendTx failed, feederID:%d", feederID)
 							}
 						}
 					}
@@ -196,22 +197,23 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 			feederIDs = strings.Split(r.FeederIDs, "_")
 		}
 		for _, fInfo := range runningFeeders {
+			eventCpy := event
 			if r.ParamsUpdate {
 				// check if this tokenFeeder's params has been changed
 				//tokenFeeder := oracleP.TokenFeeders[feederID]
 				if update := fInfo.params.update(oracleP); update {
 					paramsCopy := *fInfo.params
-					event.params = &paramsCopy
+					eventCpy.params = &paramsCopy
 				}
 			}
 			for _, p := range r.Price {
 				parsedPrice := strings.Split(p, "_")
 				if fInfo.params.tokenIDStr == parsedPrice[0] {
 					if fInfo.latestPrice != parsedPrice[2]+"_"+parsedPrice[3] {
-						event.price = parsedPrice[2]
+						eventCpy.price = parsedPrice[2]
 						decimal, _ := strconv.ParseInt(parsedPrice[3], 10, 32)
-						event.decimal = int(decimal)
-						event.txHeight, _ = strconv.ParseUint(r.TxHeight, 10, 64)
+						eventCpy.decimal = int(decimal)
+						eventCpy.txHeight, _ = strconv.ParseUint(r.TxHeight, 10, 64)
 						fInfo.latestPrice = parsedPrice[2] + "_" + parsedPrice[3]
 					}
 					break
@@ -220,12 +222,12 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 
 			for _, feedderID := range feederIDs {
 				if feedderID == strconv.FormatInt(fInfo.params.feederID, 10) {
-					event.priceUpdated = true
+					eventCpy.priceUpdated = true
 				}
 			}
 
 			// notify corresponding feeder to update price
-			fInfo.updateCh <- event
+			fInfo.updateCh <- eventCpy
 		}
 
 	}
