@@ -19,7 +19,7 @@ builds:
     flags:
       - -tags=cgo
     ldflags:
-      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwor/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwor/price-feeder/version.Commit={{.Commit}}
+      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwork/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwork/price-feeder/version.Commit={{.Commit}}
   - id: "price-feeder-darwin-arm64"
     main: ./
     binary: bin/price-feeder
@@ -34,7 +34,7 @@ builds:
     flags:
       - -tags=cgo
     ldflags:
-      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwor/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwor/price-feeder/version.Commit={{.Commit}}
+      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwork/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwork/price-feeder/version.Commit={{.Commit}}
   - id: "price-feeder-linux"
     main: ./
     binary: bin/price-feeder
@@ -49,7 +49,7 @@ builds:
     flags:
       - -tags=cgo
     ldflags:
-      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwor/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwor/price-feeder/version.Commit={{.Commit}}
+      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwork/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwork/price-feeder/version.Commit={{.Commit}}
   - id: "price-feeder-linux-arm64"
     main: ./
     binary: bin/price-feeder
@@ -64,7 +64,7 @@ builds:
     flags:
       - -tags=cgo
     ldflags:
-      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwor/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwor/price-feeder/version.Commit={{.Commit}}
+      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwork/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwork/price-feeder/version.Commit={{.Commit}}
   - id: "price-feeder-windows"
     main: ./
     binary: bin/price-feeder
@@ -80,18 +80,18 @@ builds:
       - -tags=cgo
       - -buildmode=exe
     ldflags:
-      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwor/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwor/price-feeder/version.Commit={{.Commit}}
+      - -s -w -X github.com/ExocoreNetwork/price-feeder/version.Name=price-feeder -X github.com/ExocoreNetwork/price-feeder/version.Version={{.Version}} -X github.com/ExocoreNetwork/price-feeder/version.Commit={{.Commit}}
 archives:
   - name_template: '{{ .ProjectName }}_{{ .Version }}_{{- title .Os }}_{{ .Arch }}'
     format_overrides:
       - goos: windows
         format: zip
     builds:
-      - exocored-darwin
-      - exocored-darwin-arm64
-      - exocored-windows
-      - exocored-linux
-      - exocored-linux-arm64
+      - price-feeder-darwin
+      - price-feeder-darwin-arm64
+      - price-feeder-windows
+      - price-feeder-linux
+      - price-feeder-linux-arm64
   
 checksum:
   name_template: 'checksums.txt'
