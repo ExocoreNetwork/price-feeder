@@ -159,7 +159,6 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 							}
 							log.Printf("submit price=%s decimal=%d of token=%s on height=%d for roundID:%d, feederID:%d", p.Price, p.Decimal, token, t.height, roundID, feederID)
 							res := exoclient.SendTx(cc, feederID, basedBlock, p.Price, p.RoundID, p.Decimal, int32(delta)+1, t.gas)
-							res = exoclient.SendTx(cc, feederID, basedBlock, p.Price+"9", p.RoundID, p.Decimal, int32(delta)+2, t.gas)
 							txResponse := res.GetTxResponse()
 							if txResponse.Code == statusOk {
 								log.Printf("sendTx successed, feederID:%d", feederID)
