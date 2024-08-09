@@ -13,6 +13,8 @@ import (
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
 )
 
+const defaultInterval = 10 * time.Second
+
 var sourcesMap sync.Map
 var tokensMap sync.Map
 
@@ -38,7 +40,7 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 
 	return &Fetcher{
 		sources:  sourceIDs,
-		interval: time.Second,
+		interval: defaultInterval,
 		newSource: make(chan struct {
 			name     string
 			endpoint string
@@ -117,7 +119,7 @@ func (s *source) Fetch(interval time.Duration) {
 			s.running.Inc()
 			s.lock.Unlock()
 			go func(tName string) {
-				tic := time.NewTimer(interval)
+				tic := time.NewTicker(interval)
 				for {
 					select {
 					case <-tic.C:
