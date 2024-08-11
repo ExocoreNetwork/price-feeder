@@ -72,7 +72,8 @@ func Init(mnemonic, privBase64, cID string, standalone bool) {
 	chainID = cID
 	defaultGasPrice = int64(7)
 	// TODO: set from exocore's params
-	blockMaxGas = 10000000
+
+	blockMaxGas = 20000
 }
 
 // signMsg signs the message with consensusskey
