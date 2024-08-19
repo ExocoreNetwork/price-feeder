@@ -163,7 +163,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 							if txResponse.Code == statusOk {
 								log.Printf("sendTx successed, feederID:%d", feederID)
 							} else {
-								log.Printf("sendTx failed, feederID:%d", feederID)
+								log.Printf("sendTx failed, feederID:%d, response:%v", feederID, txResponse)
 							}
 						}
 					}

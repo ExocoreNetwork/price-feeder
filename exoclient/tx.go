@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/ExocoreNetwork/exocore/app"
@@ -73,7 +72,7 @@ func Init(mnemonic, privBase64, cID string, standalone bool) {
 	defaultGasPrice = int64(7)
 	// TODO: set from exocore's params
 
-	blockMaxGas = 20000
+	blockMaxGas = 0
 }
 
 // signMsg signs the message with consensusskey
@@ -81,7 +80,7 @@ func signMsg(cc *grpc.ClientConn, gasPrice int64, msgs ...sdk.Msg) authsigning.T
 	txBuilder := txCfg.NewTxBuilder()
 	_ = txBuilder.SetMsgs(msgs...)
 	txBuilder.SetGasLimit(blockMaxGas)
-	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin(denom, math.MaxInt64)})
+	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin(denom, 0)})
 
 	signMode := txCfg.SignModeHandler().DefaultMode()
 

@@ -7,7 +7,7 @@ require (
 	github.com/ExocoreNetwork/exocore v1.0.2
 	github.com/cosmos/cosmos-sdk v0.47.8
 	github.com/cosmos/go-bip39 v1.0.0
-	github.com/ethereum/go-ethereum v1.13.15
+	github.com/ethereum/go-ethereum v1.13.5-0.20231027145059-2d7dba024d76
 	github.com/evmos/evmos/v14 v14.0.0-rc4
 	github.com/gorilla/websocket v1.5.0
 	github.com/spf13/cobra v1.8.0
