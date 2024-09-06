@@ -163,6 +163,10 @@ type Fetcher struct {
 		name     string
 		endpoint string
 	}
+	newTokenForSource chan struct {
+		sourceName string
+		tokenName  string
+	}
 	// config source's token
 	configSource chan struct {
 		s string
@@ -173,6 +177,13 @@ type Fetcher struct {
 		s string
 		t string
 	}
+}
+
+func (f *Fetcher) AddTokenForSource(sourceName string, tokenName string) {
+	f.newTokenForSource <- struct {
+		sourceName string
+		tokenName  string
+	}{sourceName, tokenName}
 }
 
 // StartAll runs the background routine to fetch prices
@@ -204,8 +215,19 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 
 				// TODO: add a new source and start fetching its data
 			case <-f.newSource:
+			case t := <-f.newTokenForSource:
+				for _, sName := range f.sources {
+					if sName == t.sourceName {
+						// TODO: it's ok to add multiple times for the same token
+						tokensMap.Store(t.tokenName, &token{name: t.tokenName, active: true})
+						if s, ok := sourcesMap.Load(t.sourceName); ok {
+							s.(*source).AddToken(t.tokenName)
+						}
+						break
+					}
+				}
 
-			// add tokens for a existing source
+				// add tokens for a existing source
 			case <-f.configSource:
 				// TODO: we currently don't handle the request like 'remove token', if we do that support, we should take care of the process in reading routine
 			}

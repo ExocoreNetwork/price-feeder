@@ -4,11 +4,11 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"fmt"
 	"os"
+	"path"
 
+	"github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var cfgFile string
@@ -59,24 +59,37 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	v := viper.New()
-	if cfgFile != "" {
-		// Use config file from the flag.
-		v.SetConfigFile(cfgFile)
-	} else {
+	//	v := viper.New()
+	//	if cfgFile != "" {
+	//		// Use config file from the flag.
+	//		v.SetConfigFile(cfgFile)
+	//	} else {
+	//		// Find home directory.
+	//		home, err := os.UserHomeDir()
+	//		cobra.CheckErr(err)
+	//
+	//		cfgFile = path.Join(home, ".price-feeder")
+	//		// Search config in home directory with name ".price-feeder" (without extension).
+	//		//		v.AddConfigPath(home)
+	//		//		v.SetConfigType("yaml")
+	//		//		v.SetConfigName(".price-feeder")
+	//	}
+	if len(cfgFile) == 0 {
 		// Find home directory.
 		home, err := os.UserHomeDir()
 		cobra.CheckErr(err)
 
-		// Search config in home directory with name ".price-feeder" (without extension).
-		v.AddConfigPath(home)
-		v.SetConfigType("yaml")
-		v.SetConfigName(".price-feeder")
+		cfgFile = path.Join(home, ".price-feeder")
+
 	}
 
-	// If a config file is found, read it in.
-	if err := v.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", v.ConfigFileUsed())
-	}
-	v.Unmarshal(&conf)
+	conf = types.ReadConfig(cfgFile)
+
+	// // If a config file is found, read it in.
+	//
+	//	if err := v.ReadInConfig(); err == nil {
+	//		fmt.Fprintln(os.Stderr, "Using config file:", v.ConfigFileUsed())
+	//	}
+	//
+	// v.Unmarshal(&conf)
 }

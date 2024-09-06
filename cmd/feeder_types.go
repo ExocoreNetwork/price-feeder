@@ -4,12 +4,14 @@ import oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 
 // Define the types for the feeder
 type feederParams struct {
-	startBlock uint64
-	endBlock   uint64
-	interval   uint64
-	decimal    int32
-	tokenIDStr string
-	feederID   int64
+	startRoundID uint64
+	startBlock   uint64
+	endBlock     uint64
+	interval     uint64
+	decimal      int32
+	tokenIDStr   string
+	feederID     int64
+	tokenName    string
 }
 
 // Define the types for the event

@@ -33,6 +33,7 @@ var (
 	clients = make(map[string]*ethclient.Client)
 	// token-> proxycontract
 	chainlinkProxy = make(map[string]*aggregatorv3.AggregatorV3Interface)
+	configPath     string
 )
 
 const (
@@ -44,14 +45,37 @@ func init() {
 	types.InitFetchers[types.Chainlink] = Init
 }
 
-func Init(confPath string) error {
+func parseConfig(confPath string) (config, error) {
 	yamlFile, err := os.Open(path.Join(confPath, envConf))
 	if err != nil {
-		return err
+		return config{}, err
 	}
 	cfg := config{}
 	if err = yaml.NewDecoder(yamlFile).Decode(&cfg); err != nil {
-		return err
+		return config{}, err
+	}
+	return cfg, nil
+}
+
+func addProxy(tokens map[string]string) error {
+	for token, address := range tokens {
+		addrParsed := strings.Split(strings.TrimSpace(address), "_")
+		if ok := isContractAddress(addrParsed[0], clients[addrParsed[1]]); !ok {
+			return fmt.Errorf("address %s is not a contract address\n", addrParsed[0])
+		}
+		var err error
+		if chainlinkProxy[token], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(addrParsed[0]), clients[addrParsed[1]]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func Init(confPath string) error {
+	configPath = confPath
+	cfg, err := parseConfig(configPath)
+	if err != nil {
+		panic(err)
 	}
 	for network, url := range cfg.URLs {
 		if len(url) == 0 {
@@ -62,23 +86,35 @@ func Init(confPath string) error {
 			panic(err)
 		}
 	}
-	for token, address := range cfg.Tokens {
-		addrParsed := strings.Split(strings.TrimSpace(address), "_")
-		if ok := isContractAddress(addrParsed[0], clients[addrParsed[1]]); !ok {
-			panic(fmt.Sprintf("address %s is not a contract address\n", addrParsed[0]))
-		}
-		if chainlinkProxy[token], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(addrParsed[0]), clients[addrParsed[1]]); err != nil {
-			panic(err)
-		}
+	if err = addProxy(cfg.Tokens); err != nil {
+		panic(err)
 	}
 	types.Fetchers[types.Chainlink] = Fetch
 	return nil
 }
 
-// Start runs the background routine to fetch prices, we use tokenAddr as input instead of token name to avoid access the list every time which might including potential concurrency conflicts
 func Fetch(token string) (*types.PriceInfo, error) {
 	chainlinkPriceFeedProxy, ok := chainlinkProxy[token]
 	if !ok {
+		// reload config to add new token
+		// TODO: this is no concurrent safe, is multiple tokens are fetching conconrrently, the access to chainlinkProxy sould be synced
+		go func() {
+			err := errors.New("start reload")
+			var cfg config
+			for err != nil {
+				if cfg, err = parseConfig(configPath); err != nil {
+					fmt.Println("config file of source chainlink parsing failed")
+					time.Sleep(10 * time.Second)
+					continue
+				}
+				for tName, address := range cfg.Tokens {
+					if token == tName {
+						err = addProxy(map[string]string{tName: address})
+					}
+				}
+				time.Sleep(10 * time.Second)
+			}
+		}()
 		log.Printf("token %s not found\n", token)
 		return nil, errors.New("token not found")
 	}
