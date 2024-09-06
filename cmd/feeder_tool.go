@@ -82,7 +82,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 				fInfo.updateCh = trigger
 				runningFeeders[int64(feederID)] = fInfo
 				// start a routine to update price for this feeder
-				go feedToken(fInfo, cc, f)
+				go feedToken(fInfo, cc, f, conf)
 				break
 			}
 		}
@@ -151,7 +151,7 @@ func reloadConfigToFetchNewTokens(remainningFeeders map[string]*feederInfo, newF
 					f.AddTokenForSource(conf.Sources[0], token)
 					// start a routine to update price for this feeder
 					newFeeder <- fInfo
-					go feedToken(fInfo, cc, f)
+					go feedToken(fInfo, cc, f, conf)
 					break
 				}
 			}
@@ -191,7 +191,7 @@ func updateCurrentFeedingTokens(oracleP oracleTypes.Params, currentFeedingTokens
 	return remain
 }
 
-func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher) {
+func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf feedertypes.Config) {
 	pChan := make(chan *types.PriceInfo)
 	prevPrice := ""
 	prevDecimal := -1
