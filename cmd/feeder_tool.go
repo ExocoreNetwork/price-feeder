@@ -140,6 +140,7 @@ func reloadConfigToFetchNewTokens(remainningFeeders map[string]*feederInfo, newF
 	for length > 0 {
 		conf := feedertypes.ReadConfig(feedertypes.ConfigFile)
 		for tokenRemainning, fInfo := range remainningFeeders {
+			fmt.Printf("loading config for for token %s \r\n", fInfo.params.tokenName)
 			for _, token := range conf.Tokens {
 				if strings.EqualFold(token, tokenRemainning) {
 					delete(remainningFeeders, tokenRemainning)

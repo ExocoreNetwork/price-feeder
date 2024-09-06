@@ -115,7 +115,7 @@ func Fetch(token string) (*types.PriceInfo, error) {
 				time.Sleep(10 * time.Second)
 			}
 		}()
-		log.Printf("token %s not found\n", token)
+		log.Printf("source_chainlink: token %s not found\n", token)
 		return nil, errors.New("token not found")
 	}
 
