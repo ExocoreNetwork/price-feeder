@@ -60,6 +60,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 		}
 		oracleParamsFeedingTokens[oracleP.Tokens[feeder.TokenID].Name+baseCurrency] = struct{}{}
 		decimal := oracleP.Tokens[feeder.TokenID].Decimal
+		tokenName := oracleP.Tokens[feeder.TokenID].Name + baseCurrency
 		fInfo := &feederInfo{
 			params: &feederParams{
 				startRoundID: feeder.StartRoundID,
@@ -69,16 +70,16 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 				decimal:      decimal,
 				tokenIDStr:   strconv.FormatInt(int64(feeder.TokenID), 10),
 				feederID:     int64(feederID),
+				tokenName:    tokenName,
 			},
 		}
-		remainningFeeders[oracleP.Tokens[feeder.TokenID].Name+baseCurrency] = fInfo
+		remainningFeeders[tokenName] = fInfo
 		// check if this feeder is supported by this price-feeder
 		for _, token := range conf.Tokens {
-			if strings.EqualFold(token, oracleP.Tokens[feeder.TokenID].Name+baseCurrency) {
-				delete(remainningFeeders, oracleP.Tokens[feeder.TokenID].Name+baseCurrency)
+			if strings.EqualFold(token, tokenName) {
+				delete(remainningFeeders, tokenName)
 				trigger := make(chan eventRes, 3)
 				fInfo.updateCh = trigger
-				fInfo.params.tokenName = token
 				runningFeeders[int64(feederID)] = fInfo
 				// start a routine to update price for this feeder
 				go feedToken(fInfo, cc, f)
@@ -179,6 +180,7 @@ func updateCurrentFeedingTokens(oracleP oracleTypes.Params, currentFeedingTokens
 				decimal:      decimal,
 				tokenIDStr:   strconv.FormatInt(int64(feeder.TokenID), 10),
 				feederID:     int64(feederID),
+				tokenName:    oracleP.Tokens[feeder.TokenID].Name + baseCurrency,
 			},
 		}
 
@@ -303,11 +305,9 @@ func InitExocoreClient(conf feedertypes.Config, standalone bool) *grpc.ClientCon
 }
 
 func triggerFeeders(r exoclient.ReCh, fInfo *feederInfo, event eventRes, oracleP oracleTypes.Params, feederIDsPriceUpdated []string) {
-	// for _, fInfo := range runningFeeders {
 	eventCpy := event
 	if r.ParamsUpdate {
 		// check if this tokenFeeder's params has been changed
-		//tokenFeeder := oracleP.TokenFeeders[feederID]
 		if update := fInfo.params.update(oracleP); update {
 			paramsCopy := *fInfo.params
 			eventCpy.params = &paramsCopy
@@ -335,5 +335,4 @@ func triggerFeeders(r exoclient.ReCh, fInfo *feederInfo, event eventRes, oracleP
 
 	// notify corresponding feeder to update price
 	fInfo.updateCh <- eventCpy
-	// }
 }

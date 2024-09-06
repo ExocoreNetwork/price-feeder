@@ -54,6 +54,10 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 			s string
 			t string
 		}),
+		newTokenForSource: make(chan struct {
+			sourceName string
+			tokenName  string
+		}),
 	}
 }
 
@@ -105,8 +109,38 @@ func (s *source) stop() bool {
 
 // AddToken not concurrency safe: stop->AddToken->start(all)(/startOne need lock/select to ensure concurrent safe
 func (s *source) AddToken(name string) bool {
-	_, loaded := s.tokens.LoadOrStore(name, types.NewPriceSyc())
-	return !loaded
+	priceInfo := types.NewPriceSyc()
+	_, loaded := s.tokens.LoadOrStore(name, priceInfo)
+	if loaded {
+		return false
+	}
+	// fetching the new token
+	if tokenAny, found := tokensMap.Load(name); found && tokenAny.(*token).active {
+		s.lock.Lock()
+		s.running.Inc()
+		s.lock.Unlock()
+		go func(tName string) {
+			// TODO: set interval for different sources
+			tic := time.NewTicker(defaultInterval)
+			for {
+				select {
+				case <-tic.C:
+					price, err := s.fetch(tName)
+					prevPrice := priceInfo.GetInfo()
+					if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
+						priceInfo.UpdateInfo(price)
+						log.Printf("update token:%s, price:%s, decimal:%d", tName, price.Price, price.Decimal)
+					}
+				case <-s.stopCh:
+					if zero := s.running.Dec(); zero == 0 {
+						close(s.stopResCh)
+					}
+					return
+				}
+			}
+		}(name)
+	}
+	return true
 }
 
 // Fetch token price from source
@@ -221,6 +255,7 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 						// TODO: it's ok to add multiple times for the same token
 						tokensMap.Store(t.tokenName, &token{name: t.tokenName, active: true})
 						if s, ok := sourcesMap.Load(t.sourceName); ok {
+							// add token for source, so this source is running already
 							s.(*source).AddToken(t.tokenName)
 						}
 						break
