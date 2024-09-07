@@ -84,7 +84,7 @@ func initConfig() {
 	}
 
 	types.ConfigFile = cfgFile
-	conf = types.ReadConfig(cfgFile)
+	conf = types.InitConfig(cfgFile)
 
 	// // If a config file is found, read it in.
 	//

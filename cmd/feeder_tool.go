@@ -58,9 +58,9 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 			// feederID=0 is reserved
 			continue
 		}
-		oracleParamsFeedingTokens[oracleP.Tokens[feeder.TokenID].Name+baseCurrency] = struct{}{}
+		tokenName := strings.ToLower(oracleP.Tokens[feeder.TokenID].Name + baseCurrency)
+		oracleParamsFeedingTokens[tokenName] = struct{}{}
 		decimal := oracleP.Tokens[feeder.TokenID].Decimal
-		tokenName := oracleP.Tokens[feeder.TokenID].Name + baseCurrency
 		fInfo := &feederInfo{
 			params: &feederParams{
 				startRoundID: feeder.StartRoundID,
@@ -138,7 +138,7 @@ func reloadConfigToFetchNewTokens(remainningFeeders map[string]*feederInfo, newF
 	updateConfig.Lock()
 	length := len(remainningFeeders)
 	for length > 0 {
-		conf := feedertypes.ReadConfig(feedertypes.ConfigFile)
+		conf := feedertypes.ReloadConfig()
 		for tokenRemainning, fInfo := range remainningFeeders {
 			fmt.Printf("loading config for for token %s \r\n", fInfo.params.tokenName)
 			for _, token := range conf.Tokens {
@@ -148,7 +148,7 @@ func reloadConfigToFetchNewTokens(remainningFeeders map[string]*feederInfo, newF
 					trigger := make(chan eventRes, 3)
 					fInfo.updateCh = trigger
 					// TODO: currently support chainlink only (index=0)
-					f.AddTokenForSource(conf.Sources[0], token)
+					f.AddTokenForSource(conf.Sources[0], tokenRemainning)
 					// start a routine to update price for this feeder
 					newFeeder <- fInfo
 					go feedToken(fInfo, cc, f, conf)
@@ -168,7 +168,8 @@ func updateCurrentFeedingTokens(oracleP oracleTypes.Params, currentFeedingTokens
 			// feederID=0 is reserved
 			continue
 		}
-		if _, ok := currentFeedingTokens[oracleP.Tokens[feeder.TokenID].Name+baseCurrency]; ok {
+		tokenName := strings.ToLower(oracleP.Tokens[feeder.TokenID].Name + baseCurrency)
+		if _, ok := currentFeedingTokens[tokenName]; ok {
 			continue
 		}
 		decimal := oracleP.Tokens[feeder.TokenID].Decimal
@@ -181,12 +182,12 @@ func updateCurrentFeedingTokens(oracleP oracleTypes.Params, currentFeedingTokens
 				decimal:      decimal,
 				tokenIDStr:   strconv.FormatInt(int64(feeder.TokenID), 10),
 				feederID:     int64(feederID),
-				tokenName:    oracleP.Tokens[feeder.TokenID].Name + baseCurrency,
+				tokenName:    tokenName,
 			},
 		}
 
-		remain[oracleP.Tokens[feeder.TokenID].Name+baseCurrency] = fInfo
-		currentFeedingTokens[oracleP.Tokens[feeder.TokenID].Name+baseCurrency] = struct{}{}
+		remain[tokenName] = fInfo
+		currentFeedingTokens[tokenName] = struct{}{}
 	}
 	return remain
 }
@@ -247,6 +248,9 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 			// TODO: use source based on oracle-params
 			f.GetLatestPriceFromSourceToken(conf.Sources[0], fInfo.params.tokenName, pChan)
 			p := <-pChan
+			if p == nil {
+				continue
+			}
 			// TODO: this price should be compared with the current price from oracle, not from source
 			if prevDecimal > -1 && prevPrice == p.Price && prevDecimal == p.Decimal {
 				// if prevPrice not changed between different rounds, we don't submit any messages and the oracle module will use the price from former round to update next round.

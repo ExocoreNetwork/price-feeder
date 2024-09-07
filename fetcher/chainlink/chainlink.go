@@ -10,6 +10,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -41,6 +42,8 @@ const (
 	envConf = "oracle_env_chainlink.yaml"
 )
 
+var proxyLock sync.RWMutex
+
 func init() {
 	types.InitFetchers[types.Chainlink] = Init
 }
@@ -58,13 +61,15 @@ func parseConfig(confPath string) (config, error) {
 }
 
 func addProxy(tokens map[string]string) error {
+	proxyLock.Lock()
+	defer proxyLock.Unlock()
 	for token, address := range tokens {
 		addrParsed := strings.Split(strings.TrimSpace(address), "_")
 		if ok := isContractAddress(addrParsed[0], clients[addrParsed[1]]); !ok {
 			return fmt.Errorf("address %s is not a contract address\n", addrParsed[0])
 		}
 		var err error
-		if chainlinkProxy[token], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(addrParsed[0]), clients[addrParsed[1]]); err != nil {
+		if chainlinkProxy[strings.ToLower(token)], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(addrParsed[0]), clients[addrParsed[1]]); err != nil {
 			return err
 		}
 	}
@@ -94,7 +99,9 @@ func Init(confPath string) error {
 }
 
 func Fetch(token string) (*types.PriceInfo, error) {
+	proxyLock.RLock()
 	chainlinkPriceFeedProxy, ok := chainlinkProxy[token]
+	proxyLock.RUnlock()
 	if !ok {
 		// reload config to add new token
 		// TODO: this is no concurrent safe, is multiple tokens are fetching conconrrently, the access to chainlinkProxy sould be synced
@@ -108,8 +115,8 @@ func Fetch(token string) (*types.PriceInfo, error) {
 					continue
 				}
 				for tName, address := range cfg.Tokens {
-					if token == tName {
-						err = addProxy(map[string]string{tName: address})
+					if token == strings.ToLower(tName) {
+						err = addProxy(map[string]string{token: address})
 					}
 				}
 				time.Sleep(10 * time.Second)

@@ -14,7 +14,7 @@ func StartPriceFeeder(cfgFile, mnemonic, sourcesPath string) bool {
 	}
 	feedertypes.ConfigFile = cfgFile
 	feedertypes.SourcesConfigPath = sourcesPath
-	conf := feedertypes.ReadConfig(cfgFile)
+	conf := feedertypes.InitConfig(cfgFile)
 
 	// Start price feeder
 	cmd.RunPriceFeeder(conf, mnemonic, sourcesPath, false)

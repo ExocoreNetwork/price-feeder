@@ -28,15 +28,16 @@ type Config struct {
 var (
 	ConfigFile        string
 	SourcesConfigPath string
+	v                 *viper.Viper
 )
 
-func ReadConfig(cfgFile string) Config {
-	v := viper.New()
-	// Use config file from the flag.
-	v.SetConfigFile(cfgFile)
-
-	// Search config in home directory with name ".price-feeder" (without extension).
-	v.SetConfigType("yaml")
+// InitConfig will only read path cfgFile once, and for reload after InitConfig, should use ReloadConfig
+func InitConfig(cfgFile string) Config {
+	if v == nil {
+		v = viper.New()
+		v.SetConfigFile(cfgFile)
+		v.SetConfigType("yaml")
+	}
 
 	// If a config file is found, read it in.
 	if err := v.ReadInConfig(); err == nil {
@@ -46,6 +47,21 @@ func ReadConfig(cfgFile string) Config {
 	conf := &Config{}
 	if err := v.Unmarshal(conf); err != nil {
 		panic(err)
+	}
+	return *conf
+}
+
+// ReloadConfig will reload config file with path set by InitConfig
+func ReloadConfig() Config {
+
+	// If a config file is found, read it in.
+	if err := v.ReadInConfig(); err == nil {
+		fmt.Fprintln(os.Stderr, "Using config file:", v.ConfigFileUsed())
+	}
+
+	conf := &Config{}
+	if err := v.Unmarshal(conf); err != nil {
+		fmt.Fprintln(os.Stderr, "parse config file failed:", v.ConfigFileUsed())
 	}
 	return *conf
 }

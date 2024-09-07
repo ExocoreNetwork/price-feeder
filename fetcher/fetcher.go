@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,7 @@ var tokensMap sync.Map
 func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 	sourceIDs := make([]string, 0)
 	for _, tName := range tokensIn {
+		tName = strings.ToLower(tName)
 		tokensMap.Store(tName, &token{name: tName, active: true})
 	}
 	for _, sName := range sourcesIn {
@@ -32,7 +34,7 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 		s.fetch = reflect.ValueOf(types.Fetchers[sName]).Interface().(types.FType)
 
 		for _, tName := range tokensIn {
-			s.tokens.Store(tName, types.NewPriceSyc())
+			s.tokens.Store(strings.ToLower(tName), types.NewPriceSyc())
 		}
 		sourcesMap.Store(sName, s)
 		sourceIDs = append(sourceIDs, sName)
