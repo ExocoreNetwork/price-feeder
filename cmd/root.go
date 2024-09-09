@@ -59,21 +59,6 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	//	v := viper.New()
-	//	if cfgFile != "" {
-	//		// Use config file from the flag.
-	//		v.SetConfigFile(cfgFile)
-	//	} else {
-	//		// Find home directory.
-	//		home, err := os.UserHomeDir()
-	//		cobra.CheckErr(err)
-	//
-	//		cfgFile = path.Join(home, ".price-feeder")
-	//		// Search config in home directory with name ".price-feeder" (without extension).
-	//		//		v.AddConfigPath(home)
-	//		//		v.SetConfigType("yaml")
-	//		//		v.SetConfigName(".price-feeder")
-	//	}
 	if len(cfgFile) == 0 {
 		// Find home directory.
 		home, err := os.UserHomeDir()
@@ -85,12 +70,4 @@ func initConfig() {
 
 	types.ConfigFile = cfgFile
 	conf = types.InitConfig(cfgFile)
-
-	// // If a config file is found, read it in.
-	//
-	//	if err := v.ReadInConfig(); err == nil {
-	//		fmt.Fprintln(os.Stderr, "Using config file:", v.ConfigFileUsed())
-	//	}
-	//
-	// v.Unmarshal(&conf)
 }

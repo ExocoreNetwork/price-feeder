@@ -35,10 +35,9 @@ var (
 func InitConfig(cfgFile string) Config {
 	if v == nil {
 		v = viper.New()
-		v.SetConfigFile(cfgFile)
-		v.SetConfigType("yaml")
 	}
-
+	v.SetConfigFile(cfgFile)
+	v.SetConfigType("yaml")
 	// If a config file is found, read it in.
 	if err := v.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", v.ConfigFileUsed())
