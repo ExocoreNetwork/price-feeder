@@ -3,7 +3,14 @@ package types
 import "sync"
 
 const (
-	Chainlink = "chainlink"
+	Chainlink   = "chainlink"
+	BeaconChain = "beaconchain"
+)
+
+var (
+	NativeRestakings = map[string][]string{
+		"eth": {"beaconchain", "stakedeth"},
+	}
 )
 
 type FType func(string) (*PriceInfo, error)

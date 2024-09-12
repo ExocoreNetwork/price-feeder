@@ -305,7 +305,6 @@ func InitExocoreClient(conf feedertypes.Config, standalone bool) *grpc.ClientCon
 	}
 	// Init consensus keys and related tx infos
 	exoclient.Init(mnemonic, privBase64, confExocore.ChainID, standalone)
-
 	return exoclient.CreateGrpcConn(confExocore.Rpc)
 }
 

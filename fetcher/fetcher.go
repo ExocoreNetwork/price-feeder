@@ -26,6 +26,7 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 		tName = strings.ToLower(tName)
 		tokensMap.Store(tName, &token{name: tName, active: true})
 	}
+
 	for _, sName := range sourcesIn {
 		s := &source{name: sName, tokens: &sync.Map{}, running: atomic.NewInt32(-1), stopCh: make(chan struct{}), stopResCh: make(chan struct{})}
 
@@ -38,6 +39,27 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 		}
 		sourcesMap.Store(sName, s)
 		sourceIDs = append(sourceIDs, sName)
+	}
+
+	// set up for nativerestaking source
+	// ethereum-beaconchain-validator. source:beaconchain
+	for _, sourceAndToken := range types.NativeRestakings {
+		sName := sourceAndToken[0]
+		tName := sourceAndToken[1]
+
+		tokensMap.Store(tName, &token{name: tName, active: true})
+
+		s := &source{name: sName, tokens: &sync.Map{}, running: atomic.NewInt32(-1), stopCh: make(chan struct{}), stopResCh: make(chan struct{})}
+
+		// init source's fetcher
+		reflect.ValueOf(types.InitFetchers[sName]).Call([]reflect.Value{reflect.ValueOf(sourcesPath)})
+		s.fetch = reflect.ValueOf(types.Fetchers[sName]).Interface().(types.FType)
+
+		s.tokens.Store(tName, types.NewPriceSyc())
+
+		sourcesMap.Store(sName, s)
+		sourceIDs = append(sourceIDs, sName)
+
 	}
 
 	return &Fetcher{
@@ -75,6 +97,12 @@ type source struct {
 	// endpoint of the source to retreive the price data; eg. https://rpc.ankr.com/eth  is used for chainlink's ethereum endpoint
 	// might vary for different sources
 	fetch types.FType
+}
+
+func NewSource() *source {
+	return &source{
+		running: atomic.NewInt32(-1),
+	}
 }
 
 // set source's status as working
