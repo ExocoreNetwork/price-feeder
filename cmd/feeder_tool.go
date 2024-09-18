@@ -123,6 +123,11 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 			feederIDs = strings.Split(r.FeederIDs, "_")
 		}
 
+		if len(r.NativeETH) > 0 {
+			// TODO: we only support eth-native-restaking for now
+			f.UpdateNativeTokenValidators(types.NativeTokenETH, r.NativeETH)
+		}
+
 		select {
 		case feeder := <-newFeeder:
 			runningFeeders[feeder.params.feederID] = feeder
@@ -209,8 +214,10 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 		prevPrice = p.Price
 		prevDecimal = int(p.Decimal)
 	}
+	log.Println("deubg---feedToken_start:", fInfo.params.startBlock, fInfo.params.tokenName)
 
 	for t := range fInfo.updateCh {
+		fmt.Printf("deubg---feedToken_triggered, height:%d, tokeName:%s\r\n", t.height, fInfo.params.tokenName)
 		// update Params if changed, paramsUpdate will be notified to corresponding feeder, not all
 		if params := t.params; params != nil {
 			startBlock = params.startBlock
@@ -245,8 +252,14 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 		delta := (t.height - startBlock) % interval
 		roundID := (t.height-startBlock)/interval + fInfo.params.startRoundID
 		if delta < 3 {
+			//TODO: for v1 exocored, we do no restrictions on sources, so here we hardcode source information for nativetoken and normal token
+			source := conf.Sources[0]
+			if fInfo.params.tokenName == types.NativeTokenETH {
+				source = types.BeaconChain
+			}
 			// TODO: use source based on oracle-params
-			f.GetLatestPriceFromSourceToken(conf.Sources[0], fInfo.params.tokenName, pChan)
+			// f.GetLatestPriceFromSourceToken(conf.Sources[0], fInfo.params.tokenName, pChan)
+			f.GetLatestPriceFromSourceToken(source, fInfo.params.tokenName, pChan)
 			p := <-pChan
 			if p == nil {
 				continue

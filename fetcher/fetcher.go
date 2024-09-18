@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"go.uber.org/atomic"
 
+	"github.com/ExocoreNetwork/price-feeder/fetcher/beaconchain"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
 )
 
@@ -68,6 +70,10 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 		newSource: make(chan struct {
 			name     string
 			endpoint string
+		}),
+		nativeTokenValidatorsUpdate: make(chan struct {
+			tokenName string
+			info      string
 		}),
 		configSource: make(chan struct {
 			s string
@@ -231,6 +237,11 @@ type Fetcher struct {
 		sourceName string
 		tokenName  string
 	}
+	// withdraw/deposit_stakerIdx_validatorIndex
+	nativeTokenValidatorsUpdate chan struct {
+		tokenName string
+		info      string
+	}
 	// config source's token
 	configSource chan struct {
 		s string
@@ -291,7 +302,15 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 						break
 					}
 				}
-
+			case updateInfo := <-f.nativeTokenValidatorsUpdate:
+				// TODO: v1 support eth-native-restaking only, refactor this after solana introduced
+				parsedInfo := strings.Split(updateInfo.info, ",")
+				if len(parsedInfo) != 3 {
+					continue
+				}
+				stakerIdx, _ := strconv.ParseInt(parsedInfo[1], 10, 64)
+				validatorIdx, _ := strconv.ParseUint(parsedInfo[1], 10, 64)
+				beaconchain.UpdateStakerValidators(int(stakerIdx), validatorIdx, parsedInfo[0] == "deposit")
 				// add tokens for a existing source
 			case <-f.configSource:
 				// TODO: we currently don't handle the request like 'remove token', if we do that support, we should take care of the process in reading routine
@@ -299,7 +318,7 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 		}
 	}()
 
-	// read loop to serve for price quering
+	// read routine, loop to serve for price quering
 	go func() {
 		// read cache, in this way, we don't need to lock every time for potential conflict with tokens update in source(like add one new token), only when we fail to found corresopnding token in this readList
 		// TODO: we currently don't have process for 'remove-token' from source, so the price will just not be updated, and we don't clear the priceInfo(it's no big deal since only the latest values are kept, and for reader, they will either ont quering this value any more or find out the timestamp not updated like forever)
@@ -350,4 +369,14 @@ func (f *Fetcher) GetLatestPriceFromSourceToken(source, token string, c chan *ty
 		s string
 		t string
 	}{c, source, token}
+}
+
+// UpdateNativeTokenValidators updates validator list for stakers of native-restaking-token(client-chain)
+func (f *Fetcher) UpdateNativeTokenValidators(tokenName, updateInfo string) {
+	f.nativeTokenValidatorsUpdate <- struct {
+		tokenName string
+		info      string
+	}{
+		tokenName, updateInfo,
+	}
 }

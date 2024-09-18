@@ -23,6 +23,7 @@ type eventRes struct {
 	decimal      int
 	params       *feederParams
 	priceUpdated bool
+	nativeToken  string
 }
 
 // Define the types for the feederInfo

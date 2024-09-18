@@ -12,20 +12,22 @@ import (
 )
 
 const (
-	subTypeNewBlock   = "tm.event='NewBlock'"
-	subTypeTx         = "tm.event='Tx' AND create_price.price_update='success'"
-	sub               = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
-	reconnectInterval = 3
-	maxRetry          = 600
-	success           = "success"
+	subTypeNewBlock      = "tm.event='NewBlock'"
+	subTypeTxUpdatePrice = "tm.event='Tx' AND create_price.price_update='success'"
+	subTypeTxNativeToken = "tm.event='Tx' AND create_price.native_token_update='update'"
+	sub                  = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
+	reconnectInterval    = 3
+	maxRetry             = 600
+	success              = "success"
 )
 
 var (
-	conn          *websocket.Conn
-	rHeader       http.Header
-	host          string
-	eventNewBlock = fmt.Sprintf(sub, subTypeNewBlock)
-	eventTx       = fmt.Sprintf(sub, subTypeTx)
+	conn               *websocket.Conn
+	rHeader            http.Header
+	host               string
+	eventNewBlock      = fmt.Sprintf(sub, subTypeNewBlock)
+	eventTxPrice       = fmt.Sprintf(sub, subTypeTxUpdatePrice)
+	eventTxNativeToken = fmt.Sprintf(sub, subTypeTxNativeToken)
 )
 
 type result struct {
@@ -44,12 +46,14 @@ type result struct {
 			} `json:"value"`
 		} `json:"data"`
 		Events struct {
-			Fee          []string `json:"fee_market.base_fee"`
-			ParamsUpdate []string `json:"create_price.params_update"`
-			FinalPrice   []string `json:"create_price.final_price"`
-			PriceUpdate  []string `json:"create_price.price_update"`
-			FeederID     []string `json:"create_price.feeder_id"`
-			FeederIDs    []string `json:"create_price.feeder_ids"`
+			Fee               []string `json:"fee_market.base_fee"`
+			ParamsUpdate      []string `json:"create_price.params_update"`
+			FinalPrice        []string `json:"create_price.final_price"`
+			PriceUpdate       []string `json:"create_price.price_update"`
+			FeederID          []string `json:"create_price.feeder_id"`
+			FeederIDs         []string `json:"create_price.feeder_ids"`
+			NativeTokenUpdate []string `json:"create_price.native_token_update"`
+			NativeTokenChange []string `json:"create_price.native_token_change"`
 		} `json:"events"`
 	} `json:"result"`
 }
@@ -61,6 +65,7 @@ type ReCh struct {
 	Price        []string
 	FeederIDs    string
 	TxHeight     string
+	NativeETH    string
 }
 
 // setup ws connection, and subscribe newblock events
@@ -147,7 +152,9 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 				continue
 			}
 			rec := ReCh{}
-			if response.Result.Query == subTypeNewBlock {
+
+			switch response.Result.Query {
+			case subTypeNewBlock:
 				rec.Height = response.Result.Data.Value.Block.Header.Height
 				events := response.Result.Events
 				if len(events.Fee) > 0 {
@@ -161,13 +168,18 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 					rec.FeederIDs = events.FeederIDs[0]
 				}
 				ret <- rec
-			} else if response.Result.Query == subTypeTx {
+			case subTypeTxUpdatePrice:
 				// as we filtered for price_udpate=success, this means price has been updated this block
 				events := response.Result.Events
 				rec.Price = events.FinalPrice
 				rec.TxHeight = response.Result.Data.Value.TxResult.Height
 				ret <- rec
+			case subTypeTxNativeToken:
+				// update validator list for staker
+				rec.NativeETH = response.Result.Events.NativeTokenChange[0]
+			default:
 			}
+
 			select {
 			case <-stop:
 				return
@@ -176,10 +188,15 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 		}
 	}()
 
-	// write message to subscribe tx event
-	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventTx)); err != nil {
+	// write message to subscribe tx event for price update
+	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventTxPrice)); err != nil {
 		panic("fail to subscribe event_tx")
 	}
+	// write message to subscribe tx event for native token validator list change
+	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventTxPrice)); err != nil {
+		panic("fail to subscribe event_tx")
+	}
+
 	// write message to subscribe newBlock event
 	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventNewBlock)); err != nil {
 		panic("fail to subscribe event")

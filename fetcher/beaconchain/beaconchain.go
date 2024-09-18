@@ -12,17 +12,19 @@ import (
 	"strings"
 
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	"github.com/cometbft/cometbft/libs/sync"
 	"github.com/imroc/biu"
 )
 
-type cBytes struct {
-	epoch       uint64
-	changeBytes []byte
-}
+// type cBytes struct {
+// 	epoch       uint64
+// 	changeBytes []byte
+// }
 
 var (
+	lock sync.RWMutex
 	// updated from oracle, deposit/withdraw
-	stakerValidators map[int][]string
+	stakerValidators = make(map[int][]string)
 	// update by query beaconChain
 	stakerBalances map[int]int
 	// latest finalized epoch we've got balances summarized for stakers
@@ -38,6 +40,7 @@ var (
 	// errors
 	//	errEpochNotUpdated   = errors.New("epoch not updated on beaconchain")
 	errTokenNotSupported = errors.New("token not supported")
+	errBalanceNotChanged = errors.New("balance not changed")
 )
 
 type DataValidatorBalance []struct {
@@ -58,8 +61,7 @@ type ResultValidatorBalances struct {
 }
 
 const (
-	envConf     = ""
-	nativeToken = "NRETH"
+	envConf = ""
 )
 
 var (
@@ -76,12 +78,39 @@ func Init(_ string) error {
 	return nil
 }
 
+func UpdateStakerValidators(stakerIdx int, validatorIdx uint64, deposit bool) {
+	validatorIdxStr := strconv.FormatUint(validatorIdx, 10)
+	lock.Lock()
+	// add a new valdiator for the staker
+	if deposit {
+		if validators, ok := stakerValidators[stakerIdx]; ok {
+			stakerValidators[stakerIdx] = append(validators, validatorIdxStr)
+		} else {
+			stakerValidators[stakerIdx] = []string{validatorIdxStr}
+		}
+	} else {
+		// remove the existing validatorIndex for the corresponding staker
+		if validators, ok := stakerValidators[stakerIdx]; ok {
+			for idx, v := range validators {
+				if v == validatorIdxStr {
+					if len(validators) == 1 {
+						delete(stakerValidators, stakerIdx)
+						break
+					}
+					stakerValidators[stakerIdx] = append(validators[:idx], validators[idx+1:]...)
+					break
+				}
+			}
+		}
+	}
+	lock.Unlock()
+}
+
 func Fetch(token string) (*types.PriceInfo, error) {
 	// check epoch, when epoch updated, update effective-balance
-	if token != nativeToken {
+	if token != types.NativeTokenETH {
 		return nil, errTokenNotSupported
 	}
-
 	// check if finalized epoch had been updated
 	epoch, err := GetFinalizedEpoch()
 	if err != nil {
@@ -99,10 +128,9 @@ func Fetch(token string) (*types.PriceInfo, error) {
 
 	}
 
-	//	finalizedEpoch = epoch
-
 	stakerChanges := make([][]int, 0, len(stakerValidators))
 
+	lock.RLock()
 	for stakerIdx, validatorIdxs := range stakerValidators {
 		stakerBalance := 0
 		// beaconcha.in support at most 100 validators for one request
@@ -131,6 +159,7 @@ func Fetch(token string) (*types.PriceInfo, error) {
 			stakerBalances[stakerIdx] = stakerBalance
 		}
 	}
+	lock.RUnlock()
 
 	finalizedEpoch = epoch
 	if len(stakerChanges) == 0 {
@@ -138,7 +167,7 @@ func Fetch(token string) (*types.PriceInfo, error) {
 			latestChangesBytes = make([]byte, 0)
 			finalizedEpoch = epoch
 		}
-		return nil, nil
+		return nil, errBalanceNotChanged
 	}
 
 	latestChangesBytes = convertBalanceChangeToBytes(stakerChanges)

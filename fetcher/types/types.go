@@ -5,11 +5,13 @@ import "sync"
 const (
 	Chainlink   = "chainlink"
 	BeaconChain = "beaconchain"
+
+	NativeTokenETH = "NRETH"
 )
 
 var (
 	NativeRestakings = map[string][]string{
-		"eth": {"beaconchain", "stakedeth"},
+		"eth": {BeaconChain, NativeTokenETH},
 	}
 )
 
