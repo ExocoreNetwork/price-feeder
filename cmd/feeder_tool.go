@@ -199,6 +199,9 @@ func updateCurrentFeedingTokens(oracleP oracleTypes.Params, currentFeedingTokens
 
 func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf feedertypes.Config) {
 	pChan := make(chan *types.PriceInfo)
+	// prevPriceInfo := &types.PriceInfo{
+	// 	Decimal: -1,
+	// }
 	prevPrice := ""
 	prevDecimal := -1
 	prevHeight := uint64(0)
@@ -227,7 +230,6 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 		}
 
 		// update latest price if changed
-		// TODO: for restart price-feeder, this will cause lots of unacceptable messages to be sent, do initialization for these prev values
 		if len(t.price) > 0 {
 			prevPrice = t.price
 			prevDecimal = t.decimal
@@ -266,6 +268,8 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 			}
 			// TODO: this price should be compared with the current price from oracle, not from source
 			if prevDecimal > -1 && prevPrice == p.Price && prevDecimal == p.Decimal {
+				// if prevDecimal > -1 && prevPrice.EqualTo(p) {
+				// if prevPriceInfo.EqualTo(p) {
 				// if prevPrice not changed between different rounds, we don't submit any messages and the oracle module will use the price from former round to update next round.
 				log.Printf("price not changed, skip submitting price for roundID:%d, feederID:%d", roundID, feederID)
 				continue
@@ -333,12 +337,15 @@ func triggerFeeders(r exoclient.ReCh, fInfo *feederInfo, event eventRes, oracleP
 	for _, p := range r.Price {
 		parsedPrice := strings.Split(p, "_")
 		if fInfo.params.tokenIDStr == parsedPrice[0] {
-			if fInfo.latestPrice != parsedPrice[2]+"_"+parsedPrice[3] {
+			if fInfo.latestPrice != strings.Join(parsedPrice[1:], "_") {
+				//			if fInfo.latestPrice != parsedPrice[2]+"_"+parsedPrice[3] {
 				eventCpy.price = parsedPrice[2]
 				decimal, _ := strconv.ParseInt(parsedPrice[3], 10, 32)
 				eventCpy.decimal = int(decimal)
 				eventCpy.txHeight, _ = strconv.ParseUint(r.TxHeight, 10, 64)
-				fInfo.latestPrice = parsedPrice[2] + "_" + parsedPrice[3]
+				eventCpy.roundID, _ = strconv.ParseUint(parsedPrice[1], 10, 64)
+				// fInfo.latestPrice = parsedPrice[2] + "_" + parsedPrice[3]
+				fInfo.latestPrice = strings.Join(parsedPrice[1:], "_")
 			}
 			break
 		}

@@ -16,29 +16,27 @@ import (
 	"github.com/imroc/biu"
 )
 
-// type cBytes struct {
-// 	epoch       uint64
-// 	changeBytes []byte
-// }
+type stakerList struct {
+	StakerAddrs []string
+}
+
+const (
+	defaultBalance = 32
+	divisor        = 1000000000
+	maxChange      = -16
+)
 
 var (
 	lock sync.RWMutex
 	// updated from oracle, deposit/withdraw
-	stakerValidators = make(map[int][]string)
-	// update by query beaconChain
-	stakerBalances map[int]int
+	// TEST only. debug
+	stakerValidators = map[int][]string{2: {"97", "199"}}
 	// latest finalized epoch we've got balances summarized for stakers
 	finalizedEpoch uint64
 	// latest stakerBalanceChanges
 	latestChangesBytes = make([]byte, 0)
-	//	latestChangesBytes = cBytes{}
-
-	// this is the latestChangesBytes that has been submmitted to exocored, when confirmed by event, this will be used to update latestChangesBytes
-	// pendingChangesBytes = make([]byte, 0)
-	//	pendingChangesBytes = cBytes{}
 
 	// errors
-	//	errEpochNotUpdated   = errors.New("epoch not updated on beaconchain")
 	errTokenNotSupported = errors.New("token not supported")
 	errBalanceNotChanged = errors.New("balance not changed")
 )
@@ -152,11 +150,14 @@ func Fetch(token string) (*types.PriceInfo, error) {
 			return nil, err
 		}
 		for _, validatorBalance := range validatorBalances {
+			// this should be initialized from exocored
 			stakerBalance += int(validatorBalance[1])
 		}
-		if delta := stakerBalance - stakerBalances[stakerIdx]; delta != 0 {
+		if delta := stakerBalance - defaultBalance*len(validatorIdxs); delta != 0 {
+			if delta < maxChange {
+				delta = maxChange
+			}
 			stakerChanges = append(stakerChanges, []int{stakerIdx, delta})
-			stakerBalances[stakerIdx] = stakerBalance
 		}
 	}
 	lock.RUnlock()
@@ -229,7 +230,7 @@ func GetValidators(indexs []string, epoch uint64) ([][]uint64, error) {
 	fmt.Println(r, r.DataValidatorBalance[1].ValidatorIndex, r.DataValidatorBalance[1].EffectiveBalance)
 	ret := make([][]uint64, 0, len(r.DataValidatorBalance))
 	for _, value := range r.DataValidatorBalance {
-		ret = append(ret, []uint64{value.ValidatorIndex, value.EffectiveBalance})
+		ret = append(ret, []uint64{value.ValidatorIndex, value.EffectiveBalance / divisor})
 	}
 	return ret, nil
 }
@@ -351,4 +352,65 @@ func convertBalanceChangeToBytes(stakerChanges [][]int) []byte {
 
 	result := append(bytesIndex, changeResult...)
 	return result
+}
+
+func parseBalanceChange(rawData []byte, sl stakerList) (map[string]int, error) {
+	indexs := rawData[:32]
+	changes := rawData[32:]
+	index := -1
+	byteIndex := 0
+	bitOffset := 0
+	lengthBits := 5
+	stakerChanges := make(map[string]int)
+	for _, b := range indexs {
+		for i := 7; i >= 0; i-- {
+			index++
+			if (b>>i)&1 == 1 {
+				lenValue := changes[byteIndex] << bitOffset
+				bitsLeft := 8 - bitOffset
+				lenValue >>= (8 - lengthBits)
+				if bitsLeft < lengthBits {
+					byteIndex++
+					lenValue |= changes[byteIndex] >> (8 - lengthBits + bitsLeft)
+					bitOffset = lengthBits - bitsLeft
+				} else {
+					if bitOffset += lengthBits; bitOffset == 8 {
+						bitOffset = 0
+					}
+					if bitsLeft == lengthBits {
+						byteIndex++
+					}
+				}
+
+				symbol := lenValue & 1
+				lenValue >>= 1
+				if lenValue <= 0 {
+					return stakerChanges, errors.New("length of change value must be at least 1 bit")
+				}
+
+				bitsExtracted := 0
+				stakerChange := 0
+				for bitsExtracted < int(lenValue) {
+					bitsLeft := 8 - bitOffset
+					byteValue := changes[byteIndex] << bitOffset
+					if (int(lenValue) - bitsExtracted) < bitsLeft {
+						bitsLeft = int(lenValue) - bitsExtracted
+						bitOffset += bitsLeft
+					} else {
+						byteIndex++
+						bitOffset = 0
+					}
+					byteValue >>= (8 - bitsLeft)
+					stakerChange = (stakerChange << bitsLeft) | int(byteValue)
+					bitsExtracted += bitsLeft
+				}
+				stakerChange++
+				if symbol == 1 {
+					stakerChange *= -1
+				}
+				stakerChanges[sl.StakerAddrs[index]] = stakerChange
+			}
+		}
+	}
+	return stakerChanges, nil
 }

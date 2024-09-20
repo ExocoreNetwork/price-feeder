@@ -21,6 +21,7 @@ type eventRes struct {
 	gas          int64
 	price        string
 	decimal      int
+	roundID      uint64
 	params       *feederParams
 	priceUpdated bool
 	nativeToken  string
