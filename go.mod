@@ -9,7 +9,7 @@ require (
 	github.com/cosmos/cosmos-sdk v0.47.8
 	github.com/cosmos/go-bip39 v1.0.0
 	github.com/ethereum/go-ethereum v1.13.5-0.20231027145059-2d7dba024d76
-	github.com/evmos/evmos/v14 v14.1.0
+	github.com/evmos/evmos/v16 v16.0.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0
 	github.com/spf13/cobra v1.8.0
@@ -81,7 +81,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dvsekhvalnov/jose2go v1.5.1-0.20231206184617-48ba0b76bc88 // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
-	github.com/evmos/evmos/v16 v16.0.0 // indirect
 	github.com/felixge/httpsnoop v1.0.2 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/gballet/go-libpcsclite v0.0.0-20191108122812-4678299bea08 // indirect
