@@ -8,7 +8,7 @@ import (
 
 	"github.com/ExocoreNetwork/exocore/app"
 	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"github.com/evmos/evmos/v14/encoding"
+	"github.com/evmos/evmos/v16/encoding"
 
 	cryptoed25519 "crypto/ed25519"
 
