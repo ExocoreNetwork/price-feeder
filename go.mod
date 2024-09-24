@@ -4,7 +4,7 @@ go 1.21.12
 
 require (
 	cosmossdk.io/simapp v0.0.0-20230608160436-666c345ad23d
-	github.com/ExocoreNetwork/exocore v0.0.0-20240920075124-12a09eb2fe43
+	github.com/ExocoreNetwork/exocore v0.0.0-20240923132633-a8ce2bf60548
 	github.com/cosmos/cosmos-sdk v0.47.8
 	github.com/cosmos/go-bip39 v1.0.0
 	github.com/ethereum/go-ethereum v1.13.5-0.20231027145059-2d7dba024d76
