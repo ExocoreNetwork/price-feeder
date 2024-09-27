@@ -28,3 +28,24 @@ func GetLatestPrice(grpcConn *grpc.ClientConn, tokenID uint64) (oracleTypes.Pric
 	return priceRes.Price, nil
 
 }
+
+// TODO: pagination
+// GetStakerInfos get all stakerInfos for the assetID
+func GetStakerInfos(grpcConn *grpc.ClientConn, assetID string) ([]*oracleTypes.StakerInfo, error) {
+	oracleClient := oracleTypes.NewQueryClient(grpcConn)
+	stakerInfoRes, err := oracleClient.StakerInfos(context.Background(), &oracleTypes.QueryStakerInfosRequest{AssetId: assetID})
+	if err != nil {
+		return []*oracleTypes.StakerInfo{}, err
+	}
+	return stakerInfoRes.StakerInfos, nil
+}
+
+// GetStakerInfos get the stakerInfos corresponding to stakerAddr for the assetID
+func GetStakerInfo(grpcConn *grpc.ClientConn, assetID, stakerAddr string) ([]*oracleTypes.StakerInfo, error) {
+	oracleClient := oracleTypes.NewQueryClient(grpcConn)
+	stakerInfoRes, err := oracleClient.StakerInfos(context.Background(), &oracleTypes.QueryStakerInfosRequest{AssetId: assetID})
+	if err != nil {
+		return []*oracleTypes.StakerInfo{}, err
+	}
+	return stakerInfoRes.StakerInfos, nil
+}

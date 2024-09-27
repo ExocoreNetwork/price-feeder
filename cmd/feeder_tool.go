@@ -95,6 +95,15 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 		go reloadConfigToFetchNewTokens(remainningFeeders, newFeeder, cc, f)
 
 	}
+
+	stakerInfos, err := exoclient.GetStakerInfos(cc, types.NativeTokenETH)
+	for err != nil {
+		log.Println("Fail to get stakerInfos, retrying...")
+		stakerInfos, err = exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
+		time.Sleep(2 * time.Second)
+	}
+	f.ResetStakerValidatorsForAll(types.NativeTokenETH, stakerInfos)
+
 	// subscribe newBlock to to trigger tx
 	res, _ := exoclient.Subscriber(conf.Exocore.Ws.Addr, conf.Exocore.Ws.Endpoint)
 
@@ -125,7 +134,15 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 
 		if len(r.NativeETH) > 0 {
 			// TODO: we only support eth-native-restaking for now
-			f.UpdateNativeTokenValidators(types.NativeTokenETH, r.NativeETH)
+			if success := f.UpdateNativeTokenValidators(types.NativeTokenETH, r.NativeETH); !success {
+				stakerInfos, err := exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
+				for err != nil {
+					log.Println("Fail to get stakerInfos, retrying...")
+					stakerInfos, err = exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
+					time.Sleep(2 * time.Second)
+				}
+				f.ResetStakerValidatorsForAll(types.NativeTokenETH, stakerInfos)
+			}
 		}
 
 		select {
@@ -338,21 +355,19 @@ func triggerFeeders(r exoclient.ReCh, fInfo *feederInfo, event eventRes, oracleP
 		parsedPrice := strings.Split(p, "_")
 		if fInfo.params.tokenIDStr == parsedPrice[0] {
 			if fInfo.latestPrice != strings.Join(parsedPrice[1:], "_") {
-				//			if fInfo.latestPrice != parsedPrice[2]+"_"+parsedPrice[3] {
 				eventCpy.price = parsedPrice[2]
 				decimal, _ := strconv.ParseInt(parsedPrice[3], 10, 32)
 				eventCpy.decimal = int(decimal)
 				eventCpy.txHeight, _ = strconv.ParseUint(r.TxHeight, 10, 64)
 				eventCpy.roundID, _ = strconv.ParseUint(parsedPrice[1], 10, 64)
-				// fInfo.latestPrice = parsedPrice[2] + "_" + parsedPrice[3]
 				fInfo.latestPrice = strings.Join(parsedPrice[1:], "_")
 			}
 			break
 		}
 	}
 
-	for _, feedderID := range feederIDsPriceUpdated {
-		if feedderID == strconv.FormatInt(fInfo.params.feederID, 10) {
+	for _, feederID := range feederIDsPriceUpdated {
+		if feederID == strconv.FormatInt(fInfo.params.feederID, 10) {
 			eventCpy.priceUpdated = true
 		}
 	}

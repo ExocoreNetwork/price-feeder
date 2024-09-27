@@ -1,16 +1,19 @@
 package beaconchain
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
+	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	"github.com/cometbft/cometbft/libs/sync"
 	"github.com/imroc/biu"
@@ -30,7 +33,13 @@ var (
 	lock sync.RWMutex
 	// updated from oracle, deposit/withdraw
 	// TEST only. debug
-	stakerValidators = map[int][]string{2: {"97", "199"}}
+	validatorsTmp = []string{
+		"0xa1d1ad0714035353258038e964ae9675dc0252ee22cea896825c01458e1807bfad2f9969338798548d9858a571f7425c",
+		"0xb2ff4716ed345b05dd1dfc6a5a9fa70856d8c75dcc9e881dd2f766d5f891326f0d10e96f3a444ce6c912b69c22c6754d",
+	}
+
+	// stakerValidators = map[int][]string{2: {"97", "199"}}
+	stakerValidators = map[int][]string{2: validatorsTmp}
 	// latest finalized epoch we've got balances summarized for stakers
 	finalizedEpoch uint64
 	// latest stakerBalanceChanges
@@ -44,6 +53,7 @@ var (
 type DataValidatorBalance []struct {
 	ValidatorIndex   uint64 `json:"validatorindex"`
 	EffectiveBalance uint64 `json:"effectivebalance"`
+	Pubkey           string `json:"pubkey"`
 }
 
 type DataEpoch struct {
@@ -58,6 +68,36 @@ type ResultValidatorBalances struct {
 	DataValidatorBalance `json:"data"`
 }
 
+type validator struct {
+	Pubkey           string `json:"pubkey"`
+	EffectiveBalance string `json:"effective_balance"`
+}
+
+type ResultValidators struct {
+	Data []struct {
+		Index     string `json:"index"`
+		Validator struct {
+			Pubkey           string `json:"pubkey"`
+			EffectiveBalance string `json:"effective_balance"`
+		} `json:"validator"`
+	} `json:"data"`
+}
+
+type ResultHeader struct {
+	Data struct {
+		Header struct {
+			Message struct {
+				Slot      string `json:"slot"`
+				StateRoot string `json:"state_root"`
+			} `json:"message"`
+		} `json:"header"`
+	} `json:"data"`
+}
+
+type validatorPostRequest struct {
+	IDs []string `json:"ids"`
+}
+
 const (
 	envConf = ""
 )
@@ -65,6 +105,15 @@ const (
 var (
 	urlQueryValidatorBalances, _ = url.Parse("https://beaconcha.in/api/v1/validator")
 	queryValue                   = url.Values(map[string][]string{"offset": {"0"}, "limit": {"1"}})
+
+	//	urlQueryValidatorsStr = "https://rpc.ankr.com/premium-http/eth_beacon/a5d2626c4027e6d924c870d2558bc774bc995ce917a17a654a92856b3279a586/eth/v1/beacon/states/finalized/validators"
+	//	urlQueryValidators, _ = url.Parse(urlQueryValidatorsStr)
+
+	urlQueryHeader          = "eth/v1/beacon/headers"
+	urlQueryHeaderFinalized = "eth/v1/beacon/headers/finalized"
+
+	urlAnkr, _        = url.Parse("https://rpc.ankr.com/premium-http/eth_beacon/a5d2626c4027e6d924c870d2558bc774bc995ce917a17a654a92856b3279a586")
+	getValidatorsPath = "eth/v1/beacon/states/%s/validators"
 )
 
 func init() {
@@ -76,21 +125,38 @@ func Init(_ string) error {
 	return nil
 }
 
-func UpdateStakerValidators(stakerIdx int, validatorIdx uint64, deposit bool) {
-	validatorIdxStr := strconv.FormatUint(validatorIdx, 10)
+func ResetStakerValidators(stakerInfos []*oracletypes.StakerInfo) {
+	lock.Lock()
+	for _, sInfo := range stakerInfos {
+		stakerValidators[int(sInfo.StakerIndex)] = sInfo.ValidatorPubkeyList
+	}
+	lock.Unlock()
+}
+
+// UpdateStakerValidators update staker's validators for deposit/withdraw events triggered by exocore
+func UpdateStakerValidators(stakerIdx int, validatorPubkey string, deposit bool, validatorsSize uint64) bool {
 	lock.Lock()
 	// add a new valdiator for the staker
 	if deposit {
+		// validator list of this staker has been changed before we get the result,
+		if len(stakerValidators[stakerIdx])+1 != int(validatorsSize) {
+			lock.Unlock()
+			return false
+		}
 		if validators, ok := stakerValidators[stakerIdx]; ok {
-			stakerValidators[stakerIdx] = append(validators, validatorIdxStr)
+			stakerValidators[stakerIdx] = append(validators, validatorPubkey)
 		} else {
-			stakerValidators[stakerIdx] = []string{validatorIdxStr}
+			stakerValidators[stakerIdx] = []string{validatorPubkey}
 		}
 	} else {
+		if len(stakerValidators[stakerIdx])-1 != int(validatorsSize) {
+			lock.Unlock()
+			return false
+		}
 		// remove the existing validatorIndex for the corresponding staker
 		if validators, ok := stakerValidators[stakerIdx]; ok {
 			for idx, v := range validators {
-				if v == validatorIdxStr {
+				if v == validatorPubkey {
 					if len(validators) == 1 {
 						delete(stakerValidators, stakerIdx)
 						break
@@ -102,6 +168,20 @@ func UpdateStakerValidators(stakerIdx int, validatorIdx uint64, deposit bool) {
 		}
 	}
 	lock.Unlock()
+	return true
+}
+
+func ResetStakerValidatorsForAll(stakerInfos []*oracletypes.StakerInfo) {
+	lock.Lock()
+	stakerValidators = make(map[int][]string)
+	for _, stakerInfo := range stakerInfos {
+		validators := make([]string, 0, len(stakerInfo.ValidatorPubkeyList))
+		for _, validatorPubkey := range stakerInfo.ValidatorPubkeyList {
+			validators = append(validators, validatorPubkey)
+		}
+		stakerValidators[int(stakerInfo.StakerIndex)] = validators
+	}
+	lock.Unlock()
 }
 
 func Fetch(token string) (*types.PriceInfo, error) {
@@ -110,7 +190,8 @@ func Fetch(token string) (*types.PriceInfo, error) {
 		return nil, errTokenNotSupported
 	}
 	// check if finalized epoch had been updated
-	epoch, err := GetFinalizedEpoch()
+	// epoch, err := GetFinalizedEpoch()
+	epoch, stateRoot, err := GetFinalizedEpochAnkr()
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +217,8 @@ func Fetch(token string) (*types.PriceInfo, error) {
 			tmpValidatorIdx := validatorIdxs[:100]
 			validatorIdxs = validatorIdxs[100:]
 
-			validatorBalances, err := GetValidators(tmpValidatorIdx, epoch)
+			// validatorBalances, err := GetValidators(tmpValidatorIdx, epoch)
+			validatorBalances, err := GetValidatorsAnkr(tmpValidatorIdx, stateRoot)
 			if err != nil {
 				return nil, err
 			}
@@ -145,7 +227,8 @@ func Fetch(token string) (*types.PriceInfo, error) {
 			}
 		}
 
-		validatorBalances, err := GetValidators(validatorIdxs, epoch)
+		// validatorBalances, err := GetValidators(validatorIdxs, epoch)
+		validatorBalances, err := GetValidatorsAnkr(validatorIdxs, stateRoot)
 		if err != nil {
 			return nil, err
 		}
@@ -179,61 +262,61 @@ func Fetch(token string) (*types.PriceInfo, error) {
 	}, nil
 }
 
-func GetFinalizedEpoch() (uint64, error) {
-	res, err := http.Get("https://beaconcha.in/api/v1/epoch/finalized")
-	if err != nil {
-		return 0, err
-	}
-	result, err := io.ReadAll(res.Body)
-	if err != nil {
-		return 0, err
-	}
-	res.Body.Close()
-	r := &ResultEpoch{}
-	_ = json.Unmarshal(result, r)
-	return r.Epoch, nil
-}
+// func GetFinalizedEpoch() (uint64, error) {
+// 	res, err := http.Get("https://beaconcha.in/api/v1/epoch/finalized")
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	result, err := io.ReadAll(res.Body)
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	res.Body.Close()
+// 	r := &ResultEpoch{}
+// 	_ = json.Unmarshal(result, r)
+// 	return r.Epoch, nil
+// }
 
-func GetValidators(indexs []string, epoch uint64) ([][]uint64, error) {
-	var err error
-	if epoch == 0 {
-		epoch, err = GetFinalizedEpoch()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	finalizedEpochStr := strconv.FormatUint(epoch, 10)
-
-	base := urlQueryValidatorBalances.JoinPath(strings.Join(indexs, ","))
-
-	value := queryValue
-	value.Add("latest_epoch", finalizedEpochStr)
-
-	base.RawQuery = value.Encode()
-
-	response, err := http.Get(base.String())
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-
-	rBytes, err := io.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	response.Body.Close()
-
-	r := &ResultValidatorBalances{}
-	_ = json.Unmarshal(rBytes, r)
-	fmt.Println(r, r.DataValidatorBalance[1].ValidatorIndex, r.DataValidatorBalance[1].EffectiveBalance)
-	ret := make([][]uint64, 0, len(r.DataValidatorBalance))
-	for _, value := range r.DataValidatorBalance {
-		ret = append(ret, []uint64{value.ValidatorIndex, value.EffectiveBalance / divisor})
-	}
-	return ret, nil
-}
+// func GetValidators(indexs []string, epoch uint64) ([][]uint64, error) {
+// 	var err error
+// 	if epoch == 0 {
+// 		epoch, err = GetFinalizedEpoch()
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 	}
+//
+// 	finalizedEpochStr := strconv.FormatUint(epoch, 10)
+//
+// 	base := urlQueryValidatorBalances.JoinPath(strings.Join(indexs, ","))
+//
+// 	value := queryValue
+// 	value.Add("latest_epoch", finalizedEpochStr)
+//
+// 	base.RawQuery = value.Encode()
+//
+// 	response, err := http.Get(base.String())
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		return nil, err
+// 	}
+//
+// 	rBytes, err := io.ReadAll(response.Body)
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		return nil, err
+// 	}
+// 	response.Body.Close()
+//
+// 	r := &ResultValidatorBalances{}
+// 	_ = json.Unmarshal(rBytes, r)
+// 	fmt.Println(r, r.DataValidatorBalance[1].ValidatorIndex, r.DataValidatorBalance[1].EffectiveBalance)
+// 	ret := make([][]uint64, 0, len(r.DataValidatorBalance))
+// 	for _, value := range r.DataValidatorBalance {
+// 		ret = append(ret, []uint64{value.ValidatorIndex, value.EffectiveBalance / divisor})
+// 	}
+// 	return ret, nil
+// }
 
 func convertBalanceChangeToBytes(stakerChanges [][]int) []byte {
 	if len(stakerChanges) == 0 {
@@ -413,4 +496,60 @@ func parseBalanceChange(rawData []byte, sl stakerList) (map[string]int, error) {
 		}
 	}
 	return stakerChanges, nil
+}
+
+func GetValidatorsAnkr(validators []string, stateRoot string) ([][]uint64, error) {
+	reqBody := validatorPostRequest{
+		IDs: validators,
+	}
+	body, _ := json.Marshal(reqBody)
+	u := urlAnkr.JoinPath(fmt.Sprintf(getValidatorsPath, stateRoot))
+	res, err := http.Post(u.String(), "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		log.Println("GetValidatorsAnkr fail", err)
+		return nil, err
+	}
+	defer res.Body.Close()
+	result, _ := io.ReadAll(res.Body)
+	re := ResultValidators{}
+	if err := json.Unmarshal(result, &re); err != nil {
+		log.Println("GetValidatorsAnkr fail", err)
+		return nil, err
+	}
+	ret := make([][]uint64, 0, len(re.Data))
+	for _, value := range re.Data {
+		index, _ := strconv.ParseUint(value.Index, 10, 64)
+		efb, _ := strconv.ParseUint(value.Validator.EffectiveBalance, 10, 64)
+		ret = append(ret, []uint64{index, efb / divisor})
+	}
+	return ret, nil
+}
+
+func GetFinalizedEpochAnkr() (epoch uint64, stateRoot string, err error) {
+	u := urlAnkr.JoinPath(urlQueryHeaderFinalized)
+	var res *http.Response
+	res, err = http.Get(u.String())
+	if err != nil {
+		res.Body.Close()
+		return
+	}
+	result, _ := io.ReadAll(res.Body)
+	re := ResultHeader{}
+	json.Unmarshal(result, &re)
+	res.Body.Close()
+	slot, _ := strconv.ParseUint(re.Data.Header.Message.Slot, 10, 64)
+	epoch = slot / 32
+	if slot%32 > 0 {
+		u = urlAnkr.JoinPath(urlQueryHeader, strconv.FormatUint(epoch*32, 10))
+		res, err = http.Get(u.String())
+		if err != nil {
+			res.Body.Close()
+			return
+		}
+		result, _ = io.ReadAll(res.Body)
+		res.Body.Close()
+		json.Unmarshal(result, &re)
+	}
+	stateRoot = re.Data.Header.Message.StateRoot
+	return
 }

@@ -8,12 +8,17 @@ const (
 	Chainlink   = "chainlink"
 	BeaconChain = "beaconchain"
 
-	NativeTokenETH = "NRETH"
+	NativeTokenETH        = "NRETH"
+	NativeTokenETHAssetID = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_0x65"
 )
 
 var (
 	NativeRestakings = map[string][]string{
 		"eth": {BeaconChain, NativeTokenETH},
+	}
+
+	AssetIDMap = map[string]string{
+		NativeTokenETH: "0xe_0x65",
 	}
 )
 
