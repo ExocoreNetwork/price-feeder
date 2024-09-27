@@ -38,7 +38,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 	// TODO: wait to continue until price fetched
 	//	time.Sleep(5 * time.Second)
 
-	cc := InitExocoreClient(conf, standalone)
+	cc := initExocoreClient(conf, standalone)
 	defer cc.Close()
 
 	// query oracle params
@@ -51,6 +51,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 	}
 
 	oracleParamsFeedingTokens := make(map[string]struct{})
+	// remainingFeeders used to track token feeders that have been set in oracle params but with no configuration from price-feeder for price fetching, and if the lenght of map is bigger than 0, price-feeder will try continuously to reload the configure file until those feeders are able to work
 	remainningFeeders := make(map[string]*feederInfo)
 	// check all live feeders and set seperate routine to udpate prices
 	for feederID, feeder := range oracleP.TokenFeeders {
@@ -96,13 +97,11 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 
 	}
 
-	stakerInfos, err := exoclient.GetStakerInfos(cc, types.NativeTokenETH)
-	for err != nil {
-		log.Println("Fail to get stakerInfos, retrying...")
-		stakerInfos, err = exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
-		time.Sleep(2 * time.Second)
+	// initialize staker's validator list for eth-native-restaking
+	nativeStakers := initializeNativeRestakingStakers(cc)
+	for nativeToken, stakerInfos := range nativeStakers {
+		f.ResetStakerValidatorsForAll(nativeToken, stakerInfos)
 	}
-	f.ResetStakerValidatorsForAll(types.NativeTokenETH, stakerInfos)
 
 	// subscribe newBlock to to trigger tx
 	res, _ := exoclient.Subscriber(conf.Exocore.Ws.Addr, conf.Exocore.Ws.Endpoint)
@@ -124,14 +123,18 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 				oracleP, err = exoclient.GetParams(cc)
 				time.Sleep(2 * time.Second)
 			}
+			// set newly added tokenfeeders in the running queue and reload the configure for them to run porperly
 			if remainningFeeders = updateCurrentFeedingTokens(oracleP, oracleParamsFeedingTokens); len(remainningFeeders) > 0 {
+				// reoload config for newly added token feeders
 				go reloadConfigToFetchNewTokens(remainningFeeders, newFeeder, cc, f)
 			}
 		}
+
 		if len(r.FeederIDs) > 0 {
 			feederIDs = strings.Split(r.FeederIDs, "_")
 		}
 
+		// this is an event that tells native token stakers update, we use 'ETH' temporary since we currently support eth-native-restaking only
 		if len(r.NativeETH) > 0 {
 			// TODO: we only support eth-native-restaking for now
 			if success := f.UpdateNativeTokenValidators(types.NativeTokenETH, r.NativeETH); !success {
@@ -156,6 +159,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 	}
 }
 
+// reloadConfigToFetchNewTokens reload config file for the remainning token feeders that are set in oracle params but not running properly for config missing
 func reloadConfigToFetchNewTokens(remainningFeeders map[string]*feederInfo, newFeeder chan *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher) {
 	updateConfig.Lock()
 	length := len(remainningFeeders)
@@ -183,6 +187,7 @@ func reloadConfigToFetchNewTokens(remainningFeeders map[string]*feederInfo, newF
 	updateConfig.Unlock()
 }
 
+// updateCurrentFeedingTokens will update current running tokenFeeders based on the params change from upstream, and it will add the newly added tokenFeeders into the running queue and return that list which will be handled by invoker to set them properly as running tokenFeeders
 func updateCurrentFeedingTokens(oracleP oracleTypes.Params, currentFeedingTokens map[string]struct{}) map[string]*feederInfo {
 	remain := make(map[string]*feederInfo)
 	for feederID, feeder := range oracleP.TokenFeeders {
@@ -214,11 +219,9 @@ func updateCurrentFeedingTokens(oracleP oracleTypes.Params, currentFeedingTokens
 	return remain
 }
 
+// feedToken will try to send create-price tx to update prices onto exocore chain when conditions reached including: tokenFeeder-running, inside-a-pricing-window, price-updated-since-previous-round
 func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf feedertypes.Config) {
 	pChan := make(chan *types.PriceInfo)
-	// prevPriceInfo := &types.PriceInfo{
-	// 	Decimal: -1,
-	// }
 	prevPrice := ""
 	prevDecimal := -1
 	prevHeight := uint64(0)
@@ -234,10 +237,8 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 		prevPrice = p.Price
 		prevDecimal = int(p.Decimal)
 	}
-	log.Println("deubg---feedToken_start:", fInfo.params.startBlock, fInfo.params.tokenName)
 
 	for t := range fInfo.updateCh {
-		fmt.Printf("deubg---feedToken_triggered, height:%d, tokeName:%s\r\n", t.height, fInfo.params.tokenName)
 		// update Params if changed, paramsUpdate will be notified to corresponding feeder, not all
 		if params := t.params; params != nil {
 			startBlock = params.startBlock
@@ -285,8 +286,6 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 			}
 			// TODO: this price should be compared with the current price from oracle, not from source
 			if prevDecimal > -1 && prevPrice == p.Price && prevDecimal == p.Decimal {
-				// if prevDecimal > -1 && prevPrice.EqualTo(p) {
-				// if prevPriceInfo.EqualTo(p) {
 				// if prevPrice not changed between different rounds, we don't submit any messages and the oracle module will use the price from former round to update next round.
 				log.Printf("price not changed, skip submitting price for roundID:%d, feederID:%d", roundID, feederID)
 				continue
@@ -312,7 +311,8 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 	}
 }
 
-func InitExocoreClient(conf feedertypes.Config, standalone bool) *grpc.ClientConn {
+// initExocoreClient initializes exocore client which is responsible for interact with exocored including: query, tx, ws-subscribe
+func initExocoreClient(conf feedertypes.Config, standalone bool) *grpc.ClientConn {
 	confExocore := conf.Exocore
 	confSender := conf.Sender
 	privBase64 := ""
@@ -342,6 +342,7 @@ func InitExocoreClient(conf feedertypes.Config, standalone bool) *grpc.ClientCon
 	return exoclient.CreateGrpcConn(confExocore.Rpc)
 }
 
+// triggerFeeders will trigger tokenFeeder based on arrival events to check and send create-price tx to update prices onto exocore chain
 func triggerFeeders(r exoclient.ReCh, fInfo *feederInfo, event eventRes, oracleP oracleTypes.Params, feederIDsPriceUpdated []string) {
 	eventCpy := event
 	if r.ParamsUpdate {
@@ -374,4 +375,19 @@ func triggerFeeders(r exoclient.ReCh, fInfo *feederInfo, event eventRes, oracleP
 
 	// notify corresponding feeder to update price
 	fInfo.updateCh <- eventCpy
+}
+
+// initializeNativeRestkingStakers initialize stakers' validator list since we wrap validator set into one single staker for each native-restaking-asset
+func initializeNativeRestakingStakers(cc *grpc.ClientConn) map[string][]*oracleTypes.StakerInfo {
+	ret := make(map[string][]*oracleTypes.StakerInfo)
+	for _, v := range types.NativeRestakings {
+		stakerInfos, err := exoclient.GetStakerInfos(cc, types.AssetIDMap[v[1]])
+		for err != nil {
+			log.Println("Fail to get stakerInfos, retrying...")
+			stakerInfos, err = exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
+			time.Sleep(2 * time.Second)
+		}
+		ret[v[1]] = stakerInfos
+	}
+	return ret
 }
