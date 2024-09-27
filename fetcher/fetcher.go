@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"go.uber.org/atomic"
-
+	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+	"github.com/ExocoreNetwork/price-feeder/fetcher/beaconchain"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	"go.uber.org/atomic"
 )
 
 const defaultInterval = 10 * time.Second
@@ -26,6 +28,7 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 		tName = strings.ToLower(tName)
 		tokensMap.Store(tName, &token{name: tName, active: true})
 	}
+
 	for _, sName := range sourcesIn {
 		s := &source{name: sName, tokens: &sync.Map{}, running: atomic.NewInt32(-1), stopCh: make(chan struct{}), stopResCh: make(chan struct{})}
 
@@ -40,6 +43,27 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 		sourceIDs = append(sourceIDs, sName)
 	}
 
+	// set up for nativerestaking source
+	// ethereum-beaconchain-validator. source:beaconchain
+	for _, sourceAndToken := range types.NativeRestakings {
+		sName := sourceAndToken[0]
+		tName := sourceAndToken[1]
+
+		tokensMap.Store(tName, &token{name: tName, active: true})
+
+		s := &source{name: sName, tokens: &sync.Map{}, running: atomic.NewInt32(-1), stopCh: make(chan struct{}), stopResCh: make(chan struct{})}
+
+		// init source's fetcher
+		reflect.ValueOf(types.InitFetchers[sName]).Call([]reflect.Value{reflect.ValueOf(sourcesPath)})
+		s.fetch = reflect.ValueOf(types.Fetchers[sName]).Interface().(types.FType)
+
+		s.tokens.Store(tName, types.NewPriceSyc())
+
+		sourcesMap.Store(sName, s)
+		sourceIDs = append(sourceIDs, sName)
+
+	}
+
 	return &Fetcher{
 		sources:  sourceIDs,
 		interval: defaultInterval,
@@ -47,6 +71,11 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 			name     string
 			endpoint string
 		}),
+		// nativeTokenValidatorsUpdate: make(chan struct {
+		// 	tokenName string
+		// 	info      string
+		// 	success   chan bool
+		// }),
 		configSource: make(chan struct {
 			s string
 			t string
@@ -75,6 +104,12 @@ type source struct {
 	// endpoint of the source to retreive the price data; eg. https://rpc.ankr.com/eth  is used for chainlink's ethereum endpoint
 	// might vary for different sources
 	fetch types.FType
+}
+
+func NewSource() *source {
+	return &source{
+		running: atomic.NewInt32(-1),
+	}
 }
 
 // set source's status as working
@@ -203,6 +238,12 @@ type Fetcher struct {
 		sourceName string
 		tokenName  string
 	}
+	// withdraw/deposit_stakerIdx_validatorIndex
+	//	nativeTokenValidatorsUpdate chan struct {
+	//		tokenName string
+	//		info      string
+	//		success   chan bool
+	//	}
 	// config source's token
 	configSource chan struct {
 		s string
@@ -263,6 +304,21 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 						break
 					}
 				}
+				//	case updateInfo := <-f.nativeTokenValidatorsUpdate:
+				//		// TODO: v1 support eth-native-restaking only, refactor this after solana introduced
+				//		parsedInfo := strings.Split(updateInfo.info, "_")
+				//		if len(parsedInfo) != 4 {
+				//			// TODO: should not happen
+				//			continue
+				//		}
+				//		stakerIdx, _ := strconv.ParseInt(parsedInfo[1], 10, 64)
+				//		validatorPubkey := parsedInfo[2]
+				//		validatorsSize, _ := strconv.ParseUint(parsedInfo[3], 10, 64)
+				//		if beaconchain.UpdateStakerValidators(int(stakerIdx), validatorPubkey, parsedInfo[0] == "deposit", validatorsSize) {
+				//			updateInfo.success <- true
+				//		} else {
+				//			updateInfo.success <- false
+				//		}
 
 				// add tokens for a existing source
 			case <-f.configSource:
@@ -271,7 +327,7 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 		}
 	}()
 
-	// read loop to serve for price quering
+	// read routine, loop to serve for price quering
 	go func() {
 		// read cache, in this way, we don't need to lock every time for potential conflict with tokens update in source(like add one new token), only when we fail to found corresopnding token in this readList
 		// TODO: we currently don't have process for 'remove-token' from source, so the price will just not be updated, and we don't clear the priceInfo(it's no big deal since only the latest values are kept, and for reader, they will either ont quering this value any more or find out the timestamp not updated like forever)
@@ -322,4 +378,20 @@ func (f *Fetcher) GetLatestPriceFromSourceToken(source, token string, c chan *ty
 		s string
 		t string
 	}{c, source, token}
+}
+
+// UpdateNativeTokenValidators updates validator list for stakers of native-restaking-token(client-chain)
+func (f *Fetcher) UpdateNativeTokenValidators(tokenName, updateInfo string) bool {
+	parsedInfo := strings.Split(updateInfo, "_")
+	if len(parsedInfo) != 4 {
+		return false
+	}
+	stakerIdx, _ := strconv.ParseInt(parsedInfo[1], 10, 64)
+	validatorPubkey := parsedInfo[2]
+	validatorsSize, _ := strconv.ParseUint(parsedInfo[3], 10, 64)
+	return beaconchain.UpdateStakerValidators(int(stakerIdx), validatorPubkey, parsedInfo[0] == "deposit", validatorsSize)
+}
+
+func (f *Fetcher) ResetStakerValidatorsForAll(tokenName string, stakerInfos []*oracletypes.StakerInfo) {
+	beaconchain.ResetStakerValidatorsForAll(stakerInfos)
 }

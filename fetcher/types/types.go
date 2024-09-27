@@ -1,9 +1,25 @@
 package types
 
-import "sync"
+import (
+	"sync"
+)
 
 const (
-	Chainlink = "chainlink"
+	Chainlink   = "chainlink"
+	BeaconChain = "beaconchain"
+
+	NativeTokenETH        = "NSTETH"
+	NativeTokenETHAssetID = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_0x65"
+)
+
+var (
+	NativeRestakings = map[string][]string{
+		"eth": {BeaconChain, NativeTokenETH},
+	}
+
+	AssetIDMap = map[string]string{
+		NativeTokenETH: NativeTokenETHAssetID,
+	}
 )
 
 type FType func(string) (*PriceInfo, error)

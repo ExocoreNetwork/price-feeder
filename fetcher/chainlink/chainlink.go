@@ -48,6 +48,28 @@ func init() {
 	types.InitFetchers[types.Chainlink] = Init
 }
 
+func Init(confPath string) error {
+	configPath = confPath
+	cfg, err := parseConfig(configPath)
+	if err != nil {
+		panic(err)
+	}
+	for network, url := range cfg.URLs {
+		if len(url) == 0 {
+			log.Fatal("rpcUrl is empty. check the .env file")
+		}
+		clients[network], err = ethclient.Dial(url)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if err = addProxy(cfg.Tokens); err != nil {
+		panic(err)
+	}
+	types.Fetchers[types.Chainlink] = Fetch
+	return nil
+}
+
 func parseConfig(confPath string) (config, error) {
 	yamlFile, err := os.Open(path.Join(confPath, envConf))
 	if err != nil {
@@ -76,27 +98,27 @@ func addProxy(tokens map[string]string) error {
 	return nil
 }
 
-func Init(confPath string) error {
-	configPath = confPath
-	cfg, err := parseConfig(configPath)
-	if err != nil {
-		panic(err)
-	}
-	for network, url := range cfg.URLs {
-		if len(url) == 0 {
-			log.Fatal("rpcUrl is empty. check the .env file")
-		}
-		clients[network], err = ethclient.Dial(url)
-		if err != nil {
-			panic(err)
-		}
-	}
-	if err = addProxy(cfg.Tokens); err != nil {
-		panic(err)
-	}
-	types.Fetchers[types.Chainlink] = Fetch
-	return nil
-}
+// func Init(confPath string) error {
+// 	configPath = confPath
+// 	cfg, err := parseConfig(configPath)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	for network, url := range cfg.URLs {
+// 		if len(url) == 0 {
+// 			log.Fatal("rpcUrl is empty. check the .env file")
+// 		}
+// 		clients[network], err = ethclient.Dial(url)
+// 		if err != nil {
+// 			panic(err)
+// 		}
+// 	}
+// 	if err = addProxy(cfg.Tokens); err != nil {
+// 		panic(err)
+// 	}
+// 	types.Fetchers[types.Chainlink] = Fetch
+// 	return nil
+// }
 
 func Fetch(token string) (*types.PriceInfo, error) {
 	proxyLock.RLock()
