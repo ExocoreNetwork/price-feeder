@@ -21,3 +21,45 @@ Or check out the latest release.
 # Quick Start
 
 `pricefeeder --config path/to/config --sources path/to/sources/config start -m [mnemonic of validator's consensus key]`
+
+### eg. 
+#### config.yaml (path/to/config/config.yaml)
+```
+sources:
+  - chainlink
+tokens:
+  - ETHUSDT
+sender:
+  mnemonic: "wonder myself quality resource ketchup occur stadium shove vicious situate plug second soccer monkey harbor output vanish then primary feed earth story real like"
+  path: /Users/xx/.tmp-exocored/config
+exocore:
+  chainid: exocoretestnet_233-1
+  appName: exocore
+  rpc: 127.0.0.1:9090
+  ws:
+    addr: !!str ws://127.0.0.1:26657
+    endpoint: /websocket
+```
+For mnemonic used by validator to sign transactions (which should be ed25519 private-key corresponding to validator's consensus key), the priority is:
+1. cli: --mnemonic flag
+2. config file: sender.mnemonic
+3. config file: search priv_validator_key.json from sender.path
+
+#### config for sources:
+- oracle_env_chainlink.yaml (path/to/sources/config/oracle_env_chainlink.yaml)
+```
+urls:
+  mainnet: !!str https://eth-mainnet.g.alchemy.com/v2/Gnp7OQDBAH0hkdE7AKsSyZQ_bfF5oGQY
+  sepolia: !!str https://eth-sepolia.g.alchemy.com/v2/Ru0VLnIJ9Raw_MHCIM_mn0Bl036n4Uhg
+tokens:
+  ETHUSDT: 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419_mainnet
+  AAVEUSDT: 0x547a514d5e3769680Ce22B2361c10Ea13619e8a9_mainnet
+  AMPLUSDT: 0xe20CA8D7546932360e37E9D72c1a47334af57706_mainnet
+  WSTETHUSDT: 0xaaabb530434B0EeAAc9A42E25dbC6A22D7bE218E_sepolia
+  STETHUSDT: 0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8_mainnet
+```
+- oracle_env_beaconchain.yaml (path/to/sources/config/oracle_env_beaconchain.yaml
+```
+url:
+  !!str https://rpc.ankr.com/premium-http/eth_beacon/a5c4917a9285617a6027e6d924c558bc7732870d279a54bc995d2626ce54ab86
+```
