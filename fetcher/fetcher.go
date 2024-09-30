@@ -162,10 +162,8 @@ func (s *source) AddToken(name string) bool {
 			for {
 				select {
 				case <-tic.C:
-					fmt.Printf("debug---fetch_triggered by tic.interval.30, token%s\r\n", tName)
 					price, err := s.fetch(tName)
 					prevPrice := priceInfo.GetInfo()
-					fmt.Printf("debug----token:%s, price:%v, length_of_bytes:%d\r\n", tName, price, len(price.Price))
 					if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
 						priceInfo.UpdateInfo(price)
 						log.Printf("update token:%s, price:%s, decimal:%d", tName, price.Price, price.Decimal)
@@ -196,10 +194,8 @@ func (s *source) Fetch(interval time.Duration) {
 				for {
 					select {
 					case <-tic.C:
-						fmt.Printf("debug---fetch_triggered by tic.interval.30, token%s\r\n", tName)
 						price, err := s.fetch(tName)
 						prevPrice := priceInfo.GetInfo()
-						fmt.Printf("debug----token:%s, price:%v, length_of_bytes:%d\r\n", tName, price, len(price.Price))
 						if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
 							priceInfo.UpdateInfo(price)
 							log.Printf("update token:%s, price:%s, decimal:%d", tName, price.Price, price.Decimal)
