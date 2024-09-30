@@ -83,7 +83,6 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 		// TODO: refactor
 		if strings.EqualFold(tokenName, types.NativeTokenETH) {
 			// actually not usdt, we so need to do refactor for the mess
-			fmt.Println("set up feeder trigger for nstethusdt")
 			delete(remainningFeeders, tokenName)
 			trigger := make(chan eventRes, 3)
 			fInfo.updateCh = trigger
