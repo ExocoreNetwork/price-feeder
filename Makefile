@@ -29,3 +29,6 @@ release:
 		-w /go/src/$(PACKAGE_NAME) \
 		ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
 		release --clean --skip validate
+
+build:
+	go build -o ./build/price-feeder

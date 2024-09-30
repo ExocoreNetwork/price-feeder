@@ -8,7 +8,8 @@ const (
 	Chainlink   = "chainlink"
 	BeaconChain = "beaconchain"
 
-	NativeTokenETH        = "NSTETH"
+	// NativeTokenETH        = "NSTETH"
+	NativeTokenETH        = "nsteth"
 	NativeTokenETHAssetID = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_0x65"
 )
 

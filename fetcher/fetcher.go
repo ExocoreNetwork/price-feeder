@@ -49,6 +49,7 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 		sName := sourceAndToken[0]
 		tName := sourceAndToken[1]
 
+		tName = strings.ToLower(tName)
 		tokensMap.Store(tName, &token{name: tName, active: true})
 
 		s := &source{name: sName, tokens: &sync.Map{}, running: atomic.NewInt32(-1), stopCh: make(chan struct{}), stopResCh: make(chan struct{})}
@@ -166,7 +167,7 @@ func (s *source) AddToken(name string) bool {
 					prevPrice := priceInfo.GetInfo()
 					if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
 						priceInfo.UpdateInfo(price)
-						log.Printf("update token:%s, price:%s, decimal:%d", tName, price.Price, price.Decimal)
+						log.Printf("update token:%s, price:%s, decimal:%d, len(bytes):%d", tName, price.Price, price.Decimal, len(price.Price))
 					}
 				case <-s.stopCh:
 					if zero := s.running.Dec(); zero == 0 {
@@ -337,7 +338,7 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 						s[ps.t] = tPrice
 					} else {
 						if len(s) == 0 {
-							fmt.Println("source has no valid token being read, remove this source for reading")
+							fmt.Println("source has no valid token being read, remove this source for reading", ps.s, ps.t)
 							delete(readList, ps.s)
 						}
 						continue

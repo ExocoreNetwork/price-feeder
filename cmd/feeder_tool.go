@@ -59,7 +59,12 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 			// feederID=0 is reserved
 			continue
 		}
-		tokenName := strings.ToLower(oracleP.Tokens[feeder.TokenID].Name + baseCurrency)
+		var tokenName string
+		if strings.EqualFold(oracleP.Tokens[feeder.TokenID].Name, types.NativeTokenETH) {
+			tokenName = strings.ToLower(oracleP.Tokens[feeder.TokenID].Name)
+		} else {
+			tokenName = strings.ToLower(oracleP.Tokens[feeder.TokenID].Name + baseCurrency)
+		}
 		oracleParamsFeedingTokens[tokenName] = struct{}{}
 		decimal := oracleP.Tokens[feeder.TokenID].Decimal
 		fInfo := &feederInfo{
@@ -75,6 +80,19 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 			},
 		}
 		remainningFeeders[tokenName] = fInfo
+		// TODO: refactor
+		if strings.EqualFold(tokenName, types.NativeTokenETH) {
+			// actually not usdt, we so need to do refactor for the mess
+			fmt.Println("set up feeder trigger for nstethusdt")
+			delete(remainningFeeders, tokenName)
+			trigger := make(chan eventRes, 3)
+			fInfo.updateCh = trigger
+			runningFeeders[int64(feederID)] = fInfo
+			// start a routine to update price for this feeder
+			go feedToken(fInfo, cc, f, conf)
+			continue
+		}
+
 		// check if this feeder is supported by this price-feeder
 		for _, token := range conf.Tokens {
 			if strings.EqualFold(token, tokenName) {
@@ -274,7 +292,8 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 		if delta < 3 {
 			//TODO: for v1 exocored, we do no restrictions on sources, so here we hardcode source information for nativetoken and normal token
 			source := conf.Sources[0]
-			if fInfo.params.tokenName == types.NativeTokenETH {
+			if strings.EqualFold(fInfo.params.tokenName, types.NativeTokenETH) {
+				fmt.Println("nstETH, use beaconchain instead of chainlink as source", t.height, feederID, fInfo.params.startRoundID)
 				source = types.BeaconChain
 			}
 			// TODO: use source based on oracle-params

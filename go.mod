@@ -241,6 +241,8 @@ replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 
+	github.com/ExocoreNetwork/exocore v0.0.0-20240926031231-b7a9717fb266 => /Users/linqing/workplace/github.com/leonz/exocore
+
 	// use Cosmos-SDK fork to enable Ledger functionality
 	github.com/cosmos/cosmos-sdk => github.com/evmos/cosmos-sdk v0.47.5-evmos.2
 	//fix cosmos-sdk error
