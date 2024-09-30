@@ -166,7 +166,7 @@ func reloadConfigToFetchNewTokens(remainningFeeders map[string]*feederInfo, newF
 	for length > 0 {
 		conf := feedertypes.ReloadConfig()
 		for tokenRemainning, fInfo := range remainningFeeders {
-			fmt.Printf("loading config for for token %s \r\n", fInfo.params.tokenName)
+			fmt.Printf("loading config for for token %s ...\r\n", fInfo.params.tokenName)
 			for _, token := range conf.Tokens {
 				if strings.EqualFold(token, tokenRemainning) {
 					delete(remainningFeeders, tokenRemainning)
@@ -292,12 +292,14 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 			}
 			basedBlock := t.height - delta
 
-			if p.Decimal > decimal {
-				p.Price = p.Price[:len(p.Price)-int(p.Decimal-decimal)]
-				p.Decimal = decimal
-			} else if p.Decimal < decimal {
-				p.Price = p.Price + strings.Repeat("0", decimal-p.Decimal)
-				p.Decimal = decimal
+			if !(fInfo.params.tokenName == types.NativeTokenETH) {
+				if p.Decimal > decimal {
+					p.Price = p.Price[:len(p.Price)-int(p.Decimal-decimal)]
+					p.Decimal = decimal
+				} else if p.Decimal < decimal {
+					p.Price = p.Price + strings.Repeat("0", decimal-p.Decimal)
+					p.Decimal = decimal
+				}
 			}
 			log.Printf("submit price=%s decimal=%d of token=%s on height=%d for roundID:%d, feederID:%d", p.Price, p.Decimal, fInfo.params.tokenName, t.height, roundID, feederID)
 			res := exoclient.SendTx(cc, feederID, basedBlock, p.Price, p.RoundID, p.Decimal, int32(delta)+1, t.gas)

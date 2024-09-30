@@ -16,7 +16,7 @@ import (
 	"go.uber.org/atomic"
 )
 
-const defaultInterval = 10 * time.Second
+const defaultInterval = 30 * time.Second
 
 var sourcesMap sync.Map
 var tokensMap sync.Map
@@ -162,8 +162,10 @@ func (s *source) AddToken(name string) bool {
 			for {
 				select {
 				case <-tic.C:
+					fmt.Printf("debug---fetch_triggered by tic.interval.30, token%s\r\n", tName)
 					price, err := s.fetch(tName)
 					prevPrice := priceInfo.GetInfo()
+					fmt.Printf("debug----token:%s, price:%v, length_of_bytes:%d\r\n", tName, price, len(price.Price))
 					if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
 						priceInfo.UpdateInfo(price)
 						log.Printf("update token:%s, price:%s, decimal:%d", tName, price.Price, price.Decimal)
@@ -194,8 +196,10 @@ func (s *source) Fetch(interval time.Duration) {
 				for {
 					select {
 					case <-tic.C:
+						fmt.Printf("debug---fetch_triggered by tic.interval.30, token%s\r\n", tName)
 						price, err := s.fetch(tName)
 						prevPrice := priceInfo.GetInfo()
+						fmt.Printf("debug----token:%s, price:%v, length_of_bytes:%d\r\n", tName, price, len(price.Price))
 						if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
 							priceInfo.UpdateInfo(price)
 							log.Printf("update token:%s, price:%s, decimal:%d", tName, price.Price, price.Decimal)
@@ -304,22 +308,6 @@ func (f *Fetcher) StartAll() context.CancelFunc {
 						break
 					}
 				}
-				//	case updateInfo := <-f.nativeTokenValidatorsUpdate:
-				//		// TODO: v1 support eth-native-restaking only, refactor this after solana introduced
-				//		parsedInfo := strings.Split(updateInfo.info, "_")
-				//		if len(parsedInfo) != 4 {
-				//			// TODO: should not happen
-				//			continue
-				//		}
-				//		stakerIdx, _ := strconv.ParseInt(parsedInfo[1], 10, 64)
-				//		validatorPubkey := parsedInfo[2]
-				//		validatorsSize, _ := strconv.ParseUint(parsedInfo[3], 10, 64)
-				//		if beaconchain.UpdateStakerValidators(int(stakerIdx), validatorPubkey, parsedInfo[0] == "deposit", validatorsSize) {
-				//			updateInfo.success <- true
-				//		} else {
-				//			updateInfo.success <- false
-				//		}
-
 				// add tokens for a existing source
 			case <-f.configSource:
 				// TODO: we currently don't handle the request like 'remove token', if we do that support, we should take care of the process in reading routine
