@@ -95,22 +95,22 @@ var (
 	lock sync.RWMutex
 	// updated from oracle, deposit/withdraw
 	// TEST only. debug
-	validatorsTmp = []string{
-		"0xa1d1ad0714035353258038e964ae9675dc0252ee22cea896825c01458e1807bfad2f9969338798548d9858a571f7425c",
-		"0xb2ff4716ed345b05dd1dfc6a5a9fa70856d8c75dcc9e881dd2f766d5f891326f0d10e96f3a444ce6c912b69c22c6754d",
-	}
+	// validatorsTmp = []string{
+	// 	"0xa1d1ad0714035353258038e964ae9675dc0252ee22cea896825c01458e1807bfad2f9969338798548d9858a571f7425c",
+	// 	"0xb2ff4716ed345b05dd1dfc6a5a9fa70856d8c75dcc9e881dd2f766d5f891326f0d10e96f3a444ce6c912b69c22c6754d",
+	// }
 
-	stakerValidators = map[int]*validatorList{2: {0, validatorsTmp}}
+	// stakerValidators = map[int]*validatorList{2: {0, validatorsTmp}}
+	stakerValidators = make(map[int]*validatorList)
 	// latest finalized epoch we've got balances summarized for stakers
 	finalizedEpoch uint64
-	// latest stakerBalanceChanges
-	latestChangesBytes = make([]byte, 0)
+	// latest stakerBalanceChanges, initialized as 0 change (256-0 of 1st parts means that all stakers have 32 efb)
+	latestChangesBytes = make([]byte, 32)
 
 	// errors
-	errTokenNotSupported         = errors.New("token not supported")
-	errBalanceNotChanged         = errors.New("balance not changed")
-	urlQueryValidatorBalances, _ = url.Parse("https://beaconcha.in/api/v1/validator")
-	queryValue                   = url.Values(map[string][]string{"offset": {"0"}, "limit": {"1"}})
+	errTokenNotSupported = errors.New("token not supported")
+	// urlQueryValidatorBalances, _ = url.Parse("https://beaconcha.in/api/v1/validator")
+	// queryValue                   = url.Values(map[string][]string{"offset": {"0"}, "limit": {"1"}})
 
 	urlQueryHeader          = "eth/v1/beacon/headers"
 	urlQueryHeaderFinalized = "eth/v1/beacon/headers/finalized"
@@ -209,6 +209,7 @@ func ResetStakerValidatorsForAll(stakerInfos []*oracletypes.StakerInfo) {
 	stakerValidators = make(map[int]*validatorList)
 	for _, stakerInfo := range stakerInfos {
 		validators := make([]string, 0, len(stakerInfo.ValidatorPubkeyList))
+
 		for _, validatorPubkey := range stakerInfo.ValidatorPubkeyList {
 			validators = append(validators, validatorPubkey)
 		}
@@ -233,7 +234,6 @@ func Fetch(token string) (*types.PriceInfo, error) {
 		return nil, errTokenNotSupported
 	}
 	// check if finalized epoch had been updated
-	// epoch, err := GetFinalizedEpoch()
 	epoch, stateRoot, err := GetFinalizedEpoch()
 	if err != nil {
 		log.Println("fetch_beaconchain. GetFinalizedEpoch fail", err)
@@ -242,13 +242,10 @@ func Fetch(token string) (*types.PriceInfo, error) {
 
 	// epoch not updated, just return without fetching since effective-balance has not changed
 	if epoch <= finalizedEpoch {
-		// TODO: return current price or {nil, err}?
-		//		log.Println("fetch_beaconchain. epoch not updated")
 		return &types.PriceInfo{
 			Price:   string(latestChangesBytes),
 			RoundID: strconv.FormatUint(finalizedEpoch, 10),
 		}, nil
-
 	}
 
 	stakerChanges := make([][]int, 0, len(stakerValidators))
@@ -294,14 +291,6 @@ func Fetch(token string) (*types.PriceInfo, error) {
 	lock.RUnlock()
 
 	finalizedEpoch = epoch
-	if len(stakerChanges) == 0 {
-		if len(latestChangesBytes) > 0 {
-			latestChangesBytes = make([]byte, 0)
-			finalizedEpoch = epoch
-		}
-		log.Println("fetch_beaconchain. balance not changed since last epoch")
-		return nil, errBalanceNotChanged
-	}
 
 	latestChangesBytes = convertBalanceChangeToBytes(stakerChanges)
 
@@ -311,65 +300,11 @@ func Fetch(token string) (*types.PriceInfo, error) {
 	}, nil
 }
 
-// func GetFinalizedEpoch() (uint64, error) {
-// 	res, err := http.Get("https://beaconcha.in/api/v1/epoch/finalized")
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	result, err := io.ReadAll(res.Body)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	res.Body.Close()
-// 	r := &ResultEpoch{}
-// 	_ = json.Unmarshal(result, r)
-// 	return r.Epoch, nil
-// }
-
-// func GetValidators(indexs []string, epoch uint64) ([][]uint64, error) {
-// 	var err error
-// 	if epoch == 0 {
-// 		epoch, err = GetFinalizedEpoch()
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 	}
-//
-// 	finalizedEpochStr := strconv.FormatUint(epoch, 10)
-//
-// 	base := urlQueryValidatorBalances.JoinPath(strings.Join(indexs, ","))
-//
-// 	value := queryValue
-// 	value.Add("latest_epoch", finalizedEpochStr)
-//
-// 	base.RawQuery = value.Encode()
-//
-// 	response, err := http.Get(base.String())
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		return nil, err
-// 	}
-//
-// 	rBytes, err := io.ReadAll(response.Body)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		return nil, err
-// 	}
-// 	response.Body.Close()
-//
-// 	r := &ResultValidatorBalances{}
-// 	_ = json.Unmarshal(rBytes, r)
-// 	fmt.Println(r, r.DataValidatorBalance[1].ValidatorIndex, r.DataValidatorBalance[1].EffectiveBalance)
-// 	ret := make([][]uint64, 0, len(r.DataValidatorBalance))
-// 	for _, value := range r.DataValidatorBalance {
-// 		ret = append(ret, []uint64{value.ValidatorIndex, value.EffectiveBalance / divisor})
-// 	}
-// 	return ret, nil
-// }
-
 func convertBalanceChangeToBytes(stakerChanges [][]int) []byte {
 	if len(stakerChanges) == 0 {
-		return nil
+		// lenght equals to 0 means that alls takers have efb of 32 with 0 changes
+		ret := make([]byte, 32)
+		return ret
 	}
 	str := ""
 	index := 0
@@ -583,7 +518,9 @@ func GetFinalizedEpoch() (epoch uint64, stateRoot string, err error) {
 	}
 	result, _ := io.ReadAll(res.Body)
 	re := ResultHeader{}
-	json.Unmarshal(result, &re)
+	if err = json.Unmarshal(result, &re); err != nil {
+		return
+	}
 	res.Body.Close()
 	slot, _ := strconv.ParseUint(re.Data.Header.Message.Slot, 10, 64)
 	epoch = slot / 32
@@ -595,7 +532,9 @@ func GetFinalizedEpoch() (epoch uint64, stateRoot string, err error) {
 		}
 		result, _ = io.ReadAll(res.Body)
 		res.Body.Close()
-		json.Unmarshal(result, &re)
+		if err = json.Unmarshal(result, &re); err != nil {
+			return
+		}
 	}
 	stateRoot = re.Data.Header.Message.StateRoot
 	return
