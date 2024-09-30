@@ -547,8 +547,8 @@ github.com/ChainSafe/go-schnorrkel v1.0.0/go.mod h1:dpzHYVxLZcp8pjlV+O+UR8K0Hp/z
 github.com/DataDog/datadog-go v3.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3tL4fMGNddJ+vMq1mwgfaqoQ=
 github.com/ExocoreNetwork/evmos/v16 v16.0.3-0.20240828081344-d5cfcd34a812 h1:4P/4GZ89DOy9uNPDlEwebPytKltbimq8wn9XiuX96vw=
 github.com/ExocoreNetwork/evmos/v16 v16.0.3-0.20240828081344-d5cfcd34a812/go.mod h1:w0vtRYI4I0/O8eihq6ZuDvlca4ZiYCKN6vpakG9zHcc=
-github.com/ExocoreNetwork/exocore v0.0.0-20240926031231-b7a9717fb266 h1:ox4jI662goOXl5Cz+LllD5gKJgfmwOffBVLfZ4+tQSg=
-github.com/ExocoreNetwork/exocore v0.0.0-20240926031231-b7a9717fb266/go.mod h1:0aG4Rdhr9ujc3O+BL0nA5FHPn6IMqrKCmhNniDkkKWY=
+github.com/ExocoreNetwork/exocore v0.0.0-20240930063211-fdf77610aa90 h1:1YdGFbV0x3sj9m/JWLUeNRt8nKbHSn2fm5jLvW6XOfc=
+github.com/ExocoreNetwork/exocore v0.0.0-20240930063211-fdf77610aa90/go.mod h1:yhV16y9r5L+IjjkoGVCFmhGQo/yqyRwUn/ywQKHvfc0=
 github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c/go.mod h1:X0CRv0ky0k6m906ixxpzmDRLvX58TFUKS2eePweuyxk=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/Microsoft/go-winio v0.6.1 h1:9/kr64B9VUZrLm5YYwbGtUJnMgqWVOdUAXu6Migciow=
