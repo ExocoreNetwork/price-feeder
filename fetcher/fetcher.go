@@ -35,7 +35,6 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 		// init source's fetcher
 		reflect.ValueOf(types.InitFetchers[sName]).Call([]reflect.Value{reflect.ValueOf(sourcesPath)})
 		s.fetch = reflect.ValueOf(types.Fetchers[sName]).Interface().(types.FType)
-
 		for _, tName := range tokensIn {
 			s.tokens.Store(strings.ToLower(tName), types.NewPriceSyc())
 		}

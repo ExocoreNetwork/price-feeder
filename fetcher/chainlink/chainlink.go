@@ -17,6 +17,7 @@ import (
 
 	aggregatorv3 "github.com/ExocoreNetwork/price-feeder/fetcher/chainlink/aggregatorv3"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -52,7 +53,7 @@ func Init(confPath string) error {
 	configPath = confPath
 	cfg, err := parseConfig(configPath)
 	if err != nil {
-		panic(err)
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 	for network, url := range cfg.URLs {
 		if len(url) == 0 {
@@ -60,7 +61,7 @@ func Init(confPath string) error {
 		}
 		clients[network], err = ethclient.Dial(url)
 		if err != nil {
-			panic(err)
+			panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 		}
 	}
 	if err = addProxy(cfg.Tokens); err != nil {

@@ -7,6 +7,48 @@ import (
 	"github.com/spf13/viper"
 )
 
+type Err struct {
+	parent  *Err
+	message string
+}
+
+func NewErr(message string) *Err {
+	return &Err{
+		parent:  nil,
+		message: message,
+	}
+}
+
+func (e *Err) Error() string {
+	details := e.message
+	m := e.Unwrap()
+	if mErr, ok := m.(*Err); ok {
+		for mErr != nil {
+			details = fmt.Sprintf("%s.{%s}", mErr.message, details)
+			e = mErr
+			m = e.Unwrap()
+			if mErr, ok = m.(*Err); !ok {
+				break
+			}
+		}
+	}
+	return fmt.Sprintf("err:%s, details:{%s}", e.message, details)
+}
+
+func (e *Err) Wrap(message string) *Err {
+	return &Err{
+		parent:  e,
+		message: message,
+	}
+}
+
+func (e *Err) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.parent
+}
+
 type Config struct {
 	Sources []string `mapstructure:"sources"`
 	Tokens  []string `mapstructure:"tokens"`
@@ -29,6 +71,8 @@ var (
 	ConfigFile        string
 	SourcesConfigPath string
 	v                 *viper.Viper
+
+	ErrInitFail = NewErr("Faile to initialization")
 )
 
 // InitConfig will only read path cfgFile once, and for reload after InitConfig, should use ReloadConfig
@@ -45,7 +89,7 @@ func InitConfig(cfgFile string) Config {
 
 	conf := &Config{}
 	if err := v.Unmarshal(conf); err != nil {
-		panic(err)
+		panic(ErrInitFail.Wrap(err.Error()))
 	}
 	return *conf
 }

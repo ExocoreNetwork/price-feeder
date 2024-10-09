@@ -17,6 +17,7 @@ import (
 
 	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/cometbft/cometbft/libs/sync"
 	"github.com/imroc/biu"
 	"gopkg.in/yaml.v2"
@@ -138,11 +139,13 @@ func parseConfig(confPath string) (config, error) {
 func Init(confPath string) error {
 	cfg, err := parseConfig(confPath)
 	if err != nil {
-		return err
+		// panic if config init error
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 	urlEndpoint, err = url.Parse(cfg.URL)
 	if err != nil {
-		return err
+		// panic if config init error
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 	types.Fetchers[types.BeaconChain] = Fetch
 	return nil
