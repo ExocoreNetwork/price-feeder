@@ -183,7 +183,7 @@ func reloadConfigToFetchNewTokens(remainningFeeders map[string]*feederInfo, newF
 	for length > 0 {
 		conf := feedertypes.ReloadConfig()
 		for tokenRemainning, fInfo := range remainningFeeders {
-			fmt.Printf("loading config for for token %s ...\r\n", fInfo.params.tokenName)
+			log.Printf("loading config for for token %s ...\r\n", fInfo.params.tokenName)
 			for _, token := range conf.Tokens {
 				if strings.EqualFold(token, tokenRemainning) {
 					delete(remainningFeeders, tokenRemainning)
@@ -292,7 +292,7 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 			//TODO: for v1 exocored, we do no restrictions on sources, so here we hardcode source information for nativetoken and normal token
 			source := conf.Sources[0]
 			if strings.EqualFold(fInfo.params.tokenName, types.NativeTokenETH) {
-				fmt.Println("nstETH, use beaconchain instead of chainlink as source", t.height, feederID, fInfo.params.startRoundID)
+				log.Println("nstETH, use beaconchain instead of chainlink as source", t.height, feederID, fInfo.params.startRoundID)
 				source = types.BeaconChain
 			}
 			// TODO: use source based on oracle-params
@@ -325,7 +325,7 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 			if txResponse.Code == statusOk {
 				log.Printf("sendTx successed, feederID:%d", feederID)
 			} else {
-				log.Printf("sendTx failed, feederID:%d, response:%v", feederID, txResponse)
+				log.Printf("sendTx failed, feederID:%d, response:%v", feederID, txResponse.RawLog)
 			}
 		}
 	}
