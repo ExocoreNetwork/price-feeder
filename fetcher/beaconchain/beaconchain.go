@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -291,6 +292,10 @@ func Fetch(token string) (*types.PriceInfo, error) {
 			stakerChanges = append(stakerChanges, []int{stakerIdx, delta})
 		}
 	}
+	sort.Slice(stakerChanges, func(i, j int) bool {
+		return stakerChanges[i][0] < stakerChanges[j][0]
+	})
+
 	lock.RUnlock()
 
 	finalizedEpoch = epoch
