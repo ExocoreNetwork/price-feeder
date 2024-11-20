@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/cometbft/cometbft/libs/sync"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/imroc/biu"
 	"gopkg.in/yaml.v2"
 )
@@ -172,6 +174,8 @@ func ResetStakerValidators(stakerInfos []*oracletypes.StakerInfo) {
 func UpdateStakerValidators(stakerIdx int, validatorPubkey string, deposit bool, index uint64) bool {
 	lock.Lock()
 	defer lock.Unlock()
+	validatorPubkeyBytes, _ := hexutil.Decode(validatorPubkey)
+	validatorPubkey = new(big.Int).SetBytes(validatorPubkeyBytes).String()
 	// add a new valdiator for the staker
 	if deposit {
 		if vList, ok := stakerValidators[stakerIdx]; ok {
