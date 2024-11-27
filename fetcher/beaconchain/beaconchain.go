@@ -84,7 +84,8 @@ type validatorPostRequest struct {
 }
 
 type config struct {
-	URL string `yaml:"url"`
+	URL   string `yaml:"url"`
+	NSTID string `yaml:"nstid"`
 }
 
 const (
@@ -151,20 +152,27 @@ func Init(confPath string) error {
 		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 	types.Fetchers[types.BeaconChain] = Fetch
+	types.UpdateNativeAssetID(cfg.NSTID)
 	return nil
 }
 
 func ResetStakerValidators(stakerInfos []*oracletypes.StakerInfo) {
 	lock.Lock()
 	for _, sInfo := range stakerInfos {
-		//		stakerValidators[int(sInfo.StakerIndex)] = sInfo.ValidatorPubkeyList
 		index := uint64(0)
 		if l := len(sInfo.BalanceList); l > 0 {
 			index = sInfo.BalanceList[l-1].Index
 		}
+		// convert bytes into number of beaconchain validator index
+		validators := make([]string, 0, len(sInfo.ValidatorPubkeyList))
+		for _, validatorPubkey := range sInfo.ValidatorPubkeyList {
+			validatorPubkeyBytes, _ := hexutil.Decode(validatorPubkey)
+			validatorPubkeyNum := new(big.Int).SetBytes(validatorPubkeyBytes).String()
+			validators = append(validators, validatorPubkeyNum)
+		}
 		stakerValidators[int(sInfo.StakerIndex)] = &validatorList{
 			index:      index,
-			validators: sInfo.ValidatorPubkeyList,
+			validators: validators,
 		}
 	}
 	lock.Unlock()
@@ -217,9 +225,10 @@ func ResetStakerValidatorsForAll(stakerInfos []*oracletypes.StakerInfo) {
 	stakerValidators = make(map[int]*validatorList)
 	for _, stakerInfo := range stakerInfos {
 		validators := make([]string, 0, len(stakerInfo.ValidatorPubkeyList))
-
 		for _, validatorPubkey := range stakerInfo.ValidatorPubkeyList {
-			validators = append(validators, validatorPubkey)
+			validatorPubkeyBytes, _ := hexutil.Decode(validatorPubkey)
+			validatorPubkeyNum := new(big.Int).SetBytes(validatorPubkeyBytes).String()
+			validators = append(validators, validatorPubkeyNum)
 		}
 
 		index := uint64(0)
@@ -229,7 +238,7 @@ func ResetStakerValidatorsForAll(stakerInfos []*oracletypes.StakerInfo) {
 		}
 		stakerValidators[int(stakerInfo.StakerIndex)] = &validatorList{
 			index:      index,
-			validators: stakerInfo.ValidatorPubkeyList,
+			validators: validators,
 		}
 	}
 	lock.Unlock()
@@ -259,6 +268,8 @@ func Fetch(token string) (*types.PriceInfo, error) {
 	stakerChanges := make([][]int, 0, len(stakerValidators))
 
 	lock.RLock()
+	log.Printf("fetch efb from beaconchain, current stakerList length:%d\r\n", len(stakerValidators))
+	hasEFBChanged := false
 	for stakerIdx, vList := range stakerValidators {
 		stakerBalance := 0
 		// beaconcha.in support at most 100 validators for one request
@@ -294,7 +305,12 @@ func Fetch(token string) (*types.PriceInfo, error) {
 				delta = maxChange
 			}
 			stakerChanges = append(stakerChanges, []int{stakerIdx, delta})
+			log.Printf("fetch efb from beaconchain, staker%d got balance change %d", stakerIdx, delta)
+			hasEFBChanged = true
 		}
+	}
+	if !hasEFBChanged && len(stakerValidators) > 0 {
+		log.Println("fetch efb from beaconchain, all efbs of validators remains to 32 without any change")
 	}
 	sort.Slice(stakerChanges, func(i, j int) bool {
 		return stakerChanges[i][0] < stakerChanges[j][0]

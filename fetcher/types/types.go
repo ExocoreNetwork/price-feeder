@@ -8,13 +8,12 @@ const (
 	Chainlink   = "chainlink"
 	BeaconChain = "beaconchain"
 
-	// NativeTokenETH        = "NSTETH"
-	NativeTokenETH        = "nsteth"
-	NativeTokenETHAssetID = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_0x65"
+	NativeTokenETH = "nsteth"
 )
 
 var (
-	NativeRestakings = map[string][]string{
+	NativeTokenETHAssetID = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_0x65"
+	NativeRestakings      = map[string][]string{
 		"eth": {BeaconChain, NativeTokenETH},
 	}
 
@@ -59,4 +58,9 @@ func NewPriceSyc() *PriceSync {
 	return &PriceSync{
 		Info: &PriceInfo{},
 	}
+}
+
+func UpdateNativeAssetID(nstID string) {
+	NativeTokenETHAssetID = nstID
+	AssetIDMap[NativeTokenETH] = NativeTokenETHAssetID
 }
