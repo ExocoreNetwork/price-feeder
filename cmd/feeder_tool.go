@@ -376,8 +376,17 @@ func triggerFeeders(r exoclient.ReCh, fInfo *feederInfo, event eventRes, oracleP
 		parsedPrice := strings.Split(p, "_")
 		if fInfo.params.tokenIDStr == parsedPrice[0] {
 			if fInfo.latestPrice != strings.Join(parsedPrice[1:], "_") {
-				eventCpy.price = parsedPrice[2]
-				decimal, _ := strconv.ParseInt(parsedPrice[3], 10, 32)
+				decimal := int64(0)
+				if l := len(parsedPrice); l > 4 {
+					// this is possible in nst case
+					eventCpy.price = strings.Join(parsedPrice[2:l-1], "_")
+					decimal, _ = strconv.ParseInt(parsedPrice[l-1], 10, 32)
+				} else {
+					eventCpy.price = parsedPrice[2]
+					decimal, _ = strconv.ParseInt(parsedPrice[3], 10, 32)
+				}
+				//				eventCpy.price = parsedPrice[2]
+				//				decimal, _ := strconv.ParseInt(parsedPrice[3], 10, 32)
 				eventCpy.decimal = int(decimal)
 				eventCpy.txHeight, _ = strconv.ParseUint(r.TxHeight, 10, 64)
 				eventCpy.roundID, _ = strconv.ParseUint(parsedPrice[1], 10, 64)

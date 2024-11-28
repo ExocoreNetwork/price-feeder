@@ -91,7 +91,7 @@ type config struct {
 const (
 	defaultBalance = 32
 	divisor        = 1000000000
-	maxChange      = -16
+	maxChange      = -32
 
 	envConf = "oracle_env_beaconchain.yaml"
 )
