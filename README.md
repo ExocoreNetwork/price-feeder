@@ -62,4 +62,6 @@ tokens:
 ```
 url:
   !!str https://rpc.ankr.com/premium-http/eth_beacon/a5c4917a9285617a6027e6d924c558bc7732870d279a54bc995d2626ce54ab86
+url:
+  !!str 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_0x65
 ```
