@@ -79,6 +79,12 @@ type ResultHeader struct {
 	} `json:"data"`
 }
 
+type ResultConfig struct {
+	Data struct {
+		SlotsPerEpoch string `json:"SLOTS_PER_EPOCH"`
+	} `json:"data"`
+}
+
 type validatorPostRequest struct {
 	IDs []string `json:"ids"`
 }
@@ -119,9 +125,11 @@ var (
 
 	urlQueryHeader          = "eth/v1/beacon/headers"
 	urlQueryHeaderFinalized = "eth/v1/beacon/headers/finalized"
+	urlQuerySlotsPerEpoch   = "eth/v1/config/spec"
 
 	getValidatorsPath = "eth/v1/beacon/states/%s/validators"
 	urlEndpoint       *url.URL
+	slotsPerEpoch     = uint64(32)
 )
 
 func init() {
@@ -153,6 +161,23 @@ func Init(confPath string) error {
 	}
 	types.Fetchers[types.BeaconChain] = Fetch
 	types.UpdateNativeAssetID(cfg.NSTID)
+	u := urlEndpoint.JoinPath(urlQuerySlotsPerEpoch)
+	res, err := http.Get(u.String())
+	if err != nil {
+		return err
+	}
+	result, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	var re ResultConfig
+	if err = json.Unmarshal(result, &re); err != nil {
+		return err
+	}
+
+	if slotsPerEpoch, err = strconv.ParseUint(re.Data.SlotsPerEpoch, 10, 64); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -545,15 +570,15 @@ func GetFinalizedEpoch() (epoch uint64, stateRoot string, err error) {
 		return
 	}
 	result, _ := io.ReadAll(res.Body)
+	defer res.Body.Close()
 	re := ResultHeader{}
 	if err = json.Unmarshal(result, &re); err != nil {
 		return
 	}
-	res.Body.Close()
 	slot, _ := strconv.ParseUint(re.Data.Header.Message.Slot, 10, 64)
-	epoch = slot / 32
-	if slot%32 > 0 {
-		u = urlEndpoint.JoinPath(urlQueryHeader, strconv.FormatUint(epoch*32, 10))
+	epoch = slot / uint64(slotsPerEpoch)
+	if slot%uint64(slotsPerEpoch) > 0 {
+		u = urlEndpoint.JoinPath(urlQueryHeader, strconv.FormatUint(epoch*slotsPerEpoch, 10))
 		res, err = http.Get(u.String())
 		if err != nil {
 			return
