@@ -164,19 +164,20 @@ func Init(confPath string) error {
 	u := urlEndpoint.JoinPath(urlQuerySlotsPerEpoch)
 	res, err := http.Get(u.String())
 	if err != nil {
-		return err
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 	result, err := io.ReadAll(res.Body)
 	if err != nil {
-		return err
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 	var re ResultConfig
 	if err = json.Unmarshal(result, &re); err != nil {
-		return err
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 
 	if slotsPerEpoch, err = strconv.ParseUint(re.Data.SlotsPerEpoch, 10, 64); err != nil {
-		return err
+		log.Printf("Failed to get slotsPerEpoch from beaconchain endpoint with error:%s, we use fallback value of 32ETH instead of panic", err)
+		slotsPerEpoch = 32
 	}
 	return nil
 }
