@@ -129,7 +129,7 @@ var (
 
 	getValidatorsPath = "eth/v1/beacon/states/%s/validators"
 	urlEndpoint       *url.URL
-	slotsPerEpoch     = uint64(32)
+	slotsPerEpoch     uint64
 )
 
 func init() {
@@ -162,24 +162,40 @@ func Init(confPath string) error {
 	types.Fetchers[types.BeaconChain] = Fetch
 	types.UpdateNativeAssetID(cfg.NSTID)
 
+	// parse nstID by splitting it
+	nstID := strings.Split(cfg.NSTID, "_")
+	if len(nstID) != 2 {
+		return feedertypes.ErrInitFail.Wrap("invalid nstID format")
+	}
+	// the second element is the lzID of the chain
+	lzID, err := strconv.ParseUint(nstID[1], 16, 64)
+	if err != nil {
+		return feedertypes.ErrInitFail.Wrap(err.Error())
+	}
+	if slotsPerEpochKnown, ok := types.ChainToSlotsPerEpoch[lzID]; ok {
+		slotsPerEpoch = slotsPerEpochKnown
+		return nil
+	}
+
+	// else, we need the slotsPerEpoch from beaconchain endpoint
+	// if it is not found or parsing errors, we can panic.
 	u := urlEndpoint.JoinPath(urlQuerySlotsPerEpoch)
 	res, err := http.Get(u.String())
 	if err != nil {
-		return feedertypes.ErrInitFail.Wrap(err.Error())
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 	result, err := io.ReadAll(res.Body)
 	if err != nil {
-		return feedertypes.ErrInitFail.Wrap(err.Error())
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 	var re ResultConfig
 	if err = json.Unmarshal(result, &re); err != nil {
-		return feedertypes.ErrInitFail.Wrap(err.Error())
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
+	}
+	if slotsPerEpoch, err = strconv.ParseUint(re.Data.SlotsPerEpoch, 10, 64); err != nil {
+		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
 
-	if slotsPerEpoch, err = strconv.ParseUint(re.Data.SlotsPerEpoch, 10, 64); err != nil {
-		log.Printf("Failed to get slotsPerEpoch from beaconchain endpoint with error:%s, we use fallback value of 32ETH instead of panic", err)
-		slotsPerEpoch = 32
-	}
 	return nil
 }
 
@@ -578,8 +594,8 @@ func GetFinalizedEpoch() (epoch uint64, stateRoot string, err error) {
 		return
 	}
 	slot, _ := strconv.ParseUint(re.Data.Header.Message.Slot, 10, 64)
-	epoch = slot / uint64(slotsPerEpoch)
-	if slot%uint64(slotsPerEpoch) > 0 {
+	epoch = slot / slotsPerEpoch
+	if slot%slotsPerEpoch > 0 {
 		u = urlEndpoint.JoinPath(urlQueryHeader, strconv.FormatUint(epoch*slotsPerEpoch, 10))
 		res, err = http.Get(u.String())
 		if err != nil {
