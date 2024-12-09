@@ -161,18 +161,19 @@ func Init(confPath string) error {
 	}
 	types.Fetchers[types.BeaconChain] = Fetch
 	types.UpdateNativeAssetID(cfg.NSTID)
+
 	u := urlEndpoint.JoinPath(urlQuerySlotsPerEpoch)
 	res, err := http.Get(u.String())
 	if err != nil {
-		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
+		return feedertypes.ErrInitFail.Wrap(err.Error())
 	}
 	result, err := io.ReadAll(res.Body)
 	if err != nil {
-		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
+		return feedertypes.ErrInitFail.Wrap(err.Error())
 	}
 	var re ResultConfig
 	if err = json.Unmarshal(result, &re); err != nil {
-		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
+		return feedertypes.ErrInitFail.Wrap(err.Error())
 	}
 
 	if slotsPerEpoch, err = strconv.ParseUint(re.Data.SlotsPerEpoch, 10, 64); err != nil {
