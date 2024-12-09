@@ -9,9 +9,16 @@ const (
 	BeaconChain = "beaconchain"
 
 	NativeTokenETH = "nsteth"
+
+	DefaultSlotsPerEpoch = uint64(32)
 )
 
 var (
+	ChainToSlotsPerEpoch = map[uint64]uint64{
+		101:   DefaultSlotsPerEpoch,
+		40161: DefaultSlotsPerEpoch,
+		40217: DefaultSlotsPerEpoch,
+	}
 	NativeTokenETHAssetID = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_0x65"
 	NativeRestakings      = map[string][]string{
 		"eth": {BeaconChain, NativeTokenETH},
