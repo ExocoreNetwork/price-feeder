@@ -67,13 +67,13 @@ func Init(conf feedertypes.Config, mnemonic, privFile string, standalone bool) (
 		file, err := os.Open(path.Join(confSender.Path, privFile))
 		if err != nil {
 			logger.Error("failed to load privatekey from local path", "path", privFile, "error", err)
-			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("fail to open consensuskey file, %v", err))
+			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to open consensuskey file, %v", err))
 		}
 		defer file.Close()
 		var privKey feedertypes.PrivValidatorKey
 		if err := json.NewDecoder(file).Decode(&privKey); err != nil {
 			logger.Error("failed to parse consensuskey from json file", "error", err)
-			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("fail to parse consensuskey from json file %v", err))
+			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to parse consensuskey from json file %v", err))
 		}
 		privBase64 = privKey.PrivKey.Value
 	} else if !bip39.IsMnemonicValid(mnemonic) {

@@ -3,7 +3,6 @@ package fetcher
 import (
 	"context"
 	"fmt"
-	"log"
 	"reflect"
 	"strconv"
 	"strings"
@@ -177,7 +176,7 @@ func (s *source) AddToken(name string) bool {
 					prevPrice := priceInfo.GetInfo()
 					if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
 						priceInfo.UpdateInfo(price)
-						log.Printf("update token:%s, price:%s, decimal:%d, len(bytes):%d", tName, price.Price, price.Decimal, len(price.Price))
+						logger.Info("update token price", "token", tName, "price", price)
 					}
 				case <-s.stopCh:
 					if zero := s.running.Dec(); zero == 0 {
@@ -209,7 +208,7 @@ func (s *source) Fetch(interval time.Duration) {
 						prevPrice := priceInfo.GetInfo()
 						if err == nil && (prevPrice.Price != price.Price || prevPrice.Decimal != price.Decimal) {
 							priceInfo.UpdateInfo(price)
-							log.Printf("update token:%s, price:%s, decimal:%d", tName, price.Price, price.Decimal)
+							logger.Info("update token price", "token", tName, "price", price)
 						}
 					case <-s.stopCh:
 						if zero := s.running.Dec(); zero == 0 {

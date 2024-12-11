@@ -8,7 +8,7 @@ import (
 var conf feedertypes.Config
 
 // LoadConf set conf from invoker instead of rootCmd
-func StartPriceFeeder(cfgFile, mnemonic, sourcesPath string, logger feedertypes.Logger) bool {
+func StartPriceFeeder(cfgFile, mnemonic, sourcesPath string, logger feedertypes.LoggerInf) bool {
 	if len(cfgFile) == 0 {
 		return false
 	}

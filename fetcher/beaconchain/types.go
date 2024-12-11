@@ -72,7 +72,7 @@ func initBeaconchain(confPath string) error {
 	// parse nstID by splitting it
 	nstID := strings.Split(cfg.NSTID, "_")
 	if len(nstID) != 2 {
-		logger.Error("invalid nstID format, should be: x_y")
+		logger.Error("invalid nstID format, should be: x_y", "nstID", nstID)
 		return feedertypes.ErrInitFail.Wrap("invalid nstID format")
 	}
 	// the second element is the lzID of the chain

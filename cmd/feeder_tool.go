@@ -28,6 +28,15 @@ func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemo
 		panic("logger is not initialized")
 	}
 
+	// init fetcher, start fetchers to get prices from sources
+	f, err := fetcher.Init(conf.Sources, conf.Tokens, sourcesPath)
+	if err != nil {
+		logger.Error("failed to init fetcher", "error", err)
+		panic(err)
+	}
+	// start fetching on all supported sources and tokens
+	_ = f.StartAll()
+
 	// init exoclient
 	cc, err := exoclient.Init(conf, mnemonic, privFile, standalone)
 	if err != nil {
@@ -35,24 +44,20 @@ func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemo
 		panic(err)
 	}
 	defer cc.Close()
-
-	// init fetcher, start fetchers to get prices from sources
-	f, err := fetcher.Init(conf.Sources, conf.Tokens, sourcesPath)
-	if err != nil {
-		logger.Error("failed to init fetcher", "error", err)
-		panic(err)
-	}
-
-	// start all supported sources and tokens
-	_ = f.StartAll()
-
-	// query oracle params
+	// initialize oracle params by querying from exocore
 	oracleP, err := exoclient.GetParams(cc)
 	for err != nil {
 		// retry forever until be interrupted manually
-		logger.Error("Fail to get oracle params on star, retrying...", err)
+		logger.Error("Failed to get oracle params on start, retrying...", err)
 		time.Sleep(2 * time.Second)
 		oracleP, err = exoclient.GetParams(cc)
+	}
+
+	// TODO: currently the getStakerInfos will return nil error when empty response, avoid infinite loop
+	// initialize staker's validator list for eth-native-restaking
+	nativeStakers := initializeNativeRestakingStakers(cc)
+	for nativeToken, stakerInfos := range nativeStakers {
+		f.ResetStakerValidatorsForAll(nativeToken, stakerInfos)
 	}
 
 	oracleParamsFeedingTokens := make(map[string]struct{})
@@ -119,12 +124,6 @@ func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemo
 		go reloadConfigToFetchNewTokens(remainningFeeders, newFeeder, cc, f)
 	}
 
-	// initialize staker's validator list for eth-native-restaking
-	nativeStakers := initializeNativeRestakingStakers(cc)
-	for nativeToken, stakerInfos := range nativeStakers {
-		f.ResetStakerValidatorsForAll(nativeToken, stakerInfos)
-	}
-
 	// subscribe newBlock to to trigger tx
 	res, _ := exoclient.Subscriber(conf.Exocore.Ws.Addr, conf.Exocore.Ws.Endpoint)
 
@@ -141,7 +140,7 @@ func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemo
 			oracleP, err = exoclient.GetParams(cc)
 			for err != nil {
 				// retry forever until be interrupted manually
-				logger.Error("Fail to get oracle params when params update detected, retrying...", "error", err)
+				logger.Error("Failed to get oracle params when params update detected, retrying...", "error", err)
 				oracleP, err = exoclient.GetParams(cc)
 				time.Sleep(2 * time.Second)
 			}
@@ -162,7 +161,7 @@ func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemo
 			if success := f.UpdateNativeTokenValidators(types.NativeTokenETH, r.NativeETH); !success {
 				stakerInfos, err := exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
 				for err != nil {
-					logger.Error("Fail to get stakerInfos, retrying...")
+					logger.Error("Failed to get stakerInfos, retrying...")
 					stakerInfos, err = exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
 					time.Sleep(2 * time.Second)
 				}
@@ -315,6 +314,10 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 				logger.Info("price not changed, skip submitting price", "roundID", roundID, "feederID", feederID)
 				continue
 			}
+			if len(p.Price) == 0 {
+				logger.Info("price has not been fetched yet, skip submitting price", "roundID", roundID, "feederID", feederID)
+				continue
+			}
 			basedBlock := t.height - delta
 
 			if !(fInfo.params.tokenName == types.NativeTokenETH) {
@@ -389,7 +392,7 @@ func initializeNativeRestakingStakers(cc *grpc.ClientConn) map[string][]*oracleT
 	for _, v := range types.NativeRestakings {
 		stakerInfos, err := exoclient.GetStakerInfos(cc, types.AssetIDMap[v[1]])
 		for err != nil {
-			logger.Error("Fail to get stakerInfos, retrying...", "error", err)
+			logger.Error("Failed to get stakerInfos, retrying...", "error", err)
 			stakerInfos, err = exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
 			time.Sleep(2 * time.Second)
 		}

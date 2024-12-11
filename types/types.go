@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -16,15 +17,9 @@ type PrivValidatorKey struct {
 	} `json:"priv_key"`
 }
 
-type LoggerInf interface {
-	Info(msg string, keyvals ...interface{})
-	Debug(msg string, keyvals ...interface{})
-	Error(msg string, keyvals ...interface{})
+type LoggerInf log.Logger
 
-	With(keyvals ...interface{}) LoggerInf
-}
-
-var logger LoggerInf = NewLogger(zapcore.InfoLevel)
+var logger log.Logger = NewLogger(zapcore.InfoLevel)
 
 type LoggerWrapper struct {
 	*zap.SugaredLogger
@@ -39,7 +34,8 @@ func (l *LoggerWrapper) Debug(msg string, keyvals ...interface{}) {
 func (l *LoggerWrapper) Error(msg string, keyvals ...interface{}) {
 	l.Errorw(msg, keyvals...)
 }
-func (l *LoggerWrapper) With(keyvals ...interface{}) LoggerInf {
+
+func (l *LoggerWrapper) With(keyvals ...interface{}) log.Logger {
 	return &LoggerWrapper{
 		l.SugaredLogger.With(keyvals...),
 	}
@@ -138,7 +134,7 @@ var (
 	SourcesConfigPath string
 	v                 *viper.Viper
 
-	ErrInitFail = NewErr("Faile to initialization")
+	ErrInitFail = NewErr("Failed to initialization")
 )
 
 // InitConfig will only read path cfgFile once, and for reload after InitConfig, should use ReloadConfig
