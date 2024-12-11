@@ -159,7 +159,6 @@ func Init(confPath string) error {
 		// panic if config init error
 		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
-	types.Fetchers[types.BeaconChain] = Fetch
 	types.UpdateNativeAssetID(cfg.NSTID)
 
 	// parse nstID by splitting it
@@ -195,6 +194,9 @@ func Init(confPath string) error {
 	if slotsPerEpoch, err = strconv.ParseUint(re.Data.SlotsPerEpoch, 10, 64); err != nil {
 		panic(feedertypes.ErrInitFail.Wrap(err.Error()))
 	}
+
+	// only make the Fetch function available after slotsPerEpoch is known
+	types.Fetchers[types.BeaconChain] = Fetch
 
 	return nil
 }
