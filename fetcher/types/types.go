@@ -2,6 +2,8 @@ package types
 
 import (
 	"sync"
+
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 )
 
 const (
@@ -27,6 +29,8 @@ var (
 	AssetIDMap = map[string]string{
 		NativeTokenETH: NativeTokenETHAssetID,
 	}
+
+	Logger feedertypes.LoggerInf
 )
 
 type FType func(string) (*PriceInfo, error)

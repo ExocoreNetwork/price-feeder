@@ -1,11 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"os"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,7 +11,6 @@ import (
 	"github.com/ExocoreNetwork/price-feeder/fetcher"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
-	"github.com/cosmos/go-bip39"
 	"google.golang.org/grpc"
 )
 
@@ -29,28 +23,40 @@ const (
 var updateConfig sync.Mutex
 
 // RunPriceFeeder runs price feeder to fetching price and feed to exocorechain
-func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string, standalone bool) {
-	runningFeeders := make(map[int64]*feederInfo)
-	// start fetcher to get prices from chainlink
-	f := fetcher.Init(conf.Sources, conf.Tokens, sourcesPath)
+func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemonic string, sourcesPath string, standalone bool) {
+	if logger = feedertypes.SetLogger(logger); logger == nil {
+		panic("logger is not initialized")
+	}
+
+	// init exoclient
+	cc, err := exoclient.Init(conf, mnemonic, privFile, standalone)
+	if err != nil {
+		logger.Error("failed to init exoclient", "error", err)
+		panic(err)
+	}
+	defer cc.Close()
+
+	// init fetcher, start fetchers to get prices from sources
+	f, err := fetcher.Init(conf.Sources, conf.Tokens, sourcesPath)
+	if err != nil {
+		logger.Error("failed to init fetcher", "error", err)
+		panic(err)
+	}
+
 	// start all supported sources and tokens
 	_ = f.StartAll()
-	// TODO: wait to continue until price fetched
-	//	time.Sleep(5 * time.Second)
-
-	cc := initExocoreClient(conf, standalone)
-	defer cc.Close()
 
 	// query oracle params
 	oracleP, err := exoclient.GetParams(cc)
 	for err != nil {
 		// retry forever until be interrupted manually
-		log.Println("Fail to get oracle params on star, retrying...", err)
+		logger.Error("Fail to get oracle params on star, retrying...", err)
 		time.Sleep(2 * time.Second)
 		oracleP, err = exoclient.GetParams(cc)
 	}
 
 	oracleParamsFeedingTokens := make(map[string]struct{})
+	runningFeeders := make(map[int64]*feederInfo)
 	// remainingFeeders used to track token feeders that have been set in oracle params but with no configuration from price-feeder for price fetching, and if the lenght of map is bigger than 0, price-feeder will try continuously to reload the configure file until those feeders are able to work
 	remainningFeeders := make(map[string]*feederInfo)
 	// check all live feeders and set seperate routine to udpate prices
@@ -111,7 +117,6 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 	if len(remainningFeeders) > 0 {
 		// we set a background routine to update config file until we got all remainning tokens configured in oracleParams
 		go reloadConfigToFetchNewTokens(remainningFeeders, newFeeder, cc, f)
-
 	}
 
 	// initialize staker's validator list for eth-native-restaking
@@ -136,7 +141,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 			oracleP, err = exoclient.GetParams(cc)
 			for err != nil {
 				// retry forever until be interrupted manually
-				log.Println("Fail to get oracle params when params update detected, retrying...", err)
+				logger.Error("Fail to get oracle params when params update detected, retrying...", "error", err)
 				oracleP, err = exoclient.GetParams(cc)
 				time.Sleep(2 * time.Second)
 			}
@@ -157,7 +162,7 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 			if success := f.UpdateNativeTokenValidators(types.NativeTokenETH, r.NativeETH); !success {
 				stakerInfos, err := exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
 				for err != nil {
-					log.Println("Fail to get stakerInfos, retrying...")
+					logger.Error("Fail to get stakerInfos, retrying...")
 					stakerInfos, err = exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
 					time.Sleep(2 * time.Second)
 				}
@@ -178,12 +183,13 @@ func RunPriceFeeder(conf feedertypes.Config, mnemonic string, sourcesPath string
 
 // reloadConfigToFetchNewTokens reload config file for the remainning token feeders that are set in oracle params but not running properly for config missing
 func reloadConfigToFetchNewTokens(remainningFeeders map[string]*feederInfo, newFeeder chan *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher) {
+	logger := getLogger()
 	updateConfig.Lock()
 	length := len(remainningFeeders)
 	for length > 0 {
 		conf := feedertypes.ReloadConfig()
 		for tokenRemainning, fInfo := range remainningFeeders {
-			log.Printf("loading config for for token %s ...\r\n", fInfo.params.tokenName)
+			logger.Info("loading config for for token... ", "tokenName", fInfo.params.tokenName)
 			for _, token := range conf.Tokens {
 				if strings.EqualFold(token, tokenRemainning) {
 					delete(remainningFeeders, tokenRemainning)
@@ -238,6 +244,7 @@ func updateCurrentFeedingTokens(oracleP oracleTypes.Params, currentFeedingTokens
 
 // feedToken will try to send create-price tx to update prices onto exocore chain when conditions reached including: tokenFeeder-running, inside-a-pricing-window, price-updated-since-previous-round
 func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf feedertypes.Config) {
+	logger := getLogger()
 	pChan := make(chan *types.PriceInfo)
 	prevPrice := ""
 	prevDecimal := -1
@@ -277,7 +284,7 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 			continue
 		}
 		// check feeder status to feed price
-		log.Printf("Triggered, height:%d, feeder-parames:{feederID:%d, startBlock:%d, interval:%d, roundID:%d}:", t.height, feederID, fInfo.params.startBlock, fInfo.params.interval, fInfo.params.startRoundID)
+		logger.Info("Triggered by new Block", "block_height", t.height, "feederID", feederID, "start_base_block", fInfo.params.startBlock, "round_interval", fInfo.params.interval, "start_roundID", fInfo.params.startRoundID)
 		if t.height < startBlock {
 			// tx event will have zero height, just don't submit price
 			continue
@@ -292,7 +299,7 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 			//TODO: for v1 exocored, we do no restrictions on sources, so here we hardcode source information for nativetoken and normal token
 			source := conf.Sources[0]
 			if strings.EqualFold(fInfo.params.tokenName, types.NativeTokenETH) {
-				log.Println("nstETH, use beaconchain instead of chainlink as source", t.height, feederID, fInfo.params.startRoundID)
+				logger.Info("nstETH, use beaconchain instead of chainlink as source", "block_height", t.height, "feederID", feederID, "start_roundID", fInfo.params.startRoundID)
 				source = types.BeaconChain
 			}
 			// TODO: use source based on oracle-params
@@ -305,7 +312,7 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 			// TODO: this price should be compared with the current price from oracle, not from source
 			if prevDecimal > -1 && prevPrice == p.Price && prevDecimal == p.Decimal {
 				// if prevPrice not changed between different rounds, we don't submit any messages and the oracle module will use the price from former round to update next round.
-				log.Printf("price not changed, skip submitting price for roundID:%d, feederID:%d", roundID, feederID)
+				logger.Info("price not changed, skip submitting price", "roundID", roundID, "feederID", feederID)
 				continue
 			}
 			basedBlock := t.height - delta
@@ -319,47 +326,16 @@ func feedToken(fInfo *feederInfo, cc *grpc.ClientConn, f *fetcher.Fetcher, conf 
 					p.Decimal = decimal
 				}
 			}
-			log.Printf("submit price=%s decimal=%d of token=%s on height=%d for roundID:%d, feederID:%d", p.Price, p.Decimal, fInfo.params.tokenName, t.height, roundID, feederID)
+			logger.Info("submit create-price tx", "price", p.Price, "decimal", p.Decimal, "tokeName", fInfo.params.tokenName, "block_height", t.height, "roundID", roundID, "feederID", feederID)
 			res := exoclient.SendTx(cc, feederID, basedBlock, p.Price, p.RoundID, p.Decimal, int32(delta)+1, t.gas)
 			txResponse := res.GetTxResponse()
 			if txResponse.Code == statusOk {
-				log.Printf("sendTx successed, feederID:%d", feederID)
+				logger.Info("sendTx succeeded", "feederID", feederID)
 			} else {
-				log.Printf("sendTx failed, feederID:%d, response:%v", feederID, txResponse.RawLog)
+				logger.Error("sendTx failed", "feederID", feederID, "response_rawlog", txResponse.RawLog)
 			}
 		}
 	}
-}
-
-// initExocoreClient initializes exocore client which is responsible for interact with exocored including: query, tx, ws-subscribe
-func initExocoreClient(conf feedertypes.Config, standalone bool) *grpc.ClientConn {
-	confExocore := conf.Exocore
-	confSender := conf.Sender
-	privBase64 := ""
-
-	// if mnemonic is not set from flag, then check config file to find if there is mnemonic configured
-	if len(mnemonic) == 0 && len(confSender.Mnemonic) > 0 {
-		mnemonic = confSender.Mnemonic
-	}
-
-	if len(mnemonic) == 0 {
-		// load privatekey from local path
-		file, err := os.Open(path.Join(confSender.Path, privFile))
-		if err != nil {
-			panic(fmt.Sprintf("fail to open consensuskey file, %s", err.Error()))
-		}
-		defer file.Close()
-		var pvKey PrivValidatorKey
-		if err := json.NewDecoder(file).Decode(&pvKey); err != nil {
-			panic(fmt.Sprintf("fail to parse consensuskey file from json, %s", err.Error()))
-		}
-		privBase64 = pvKey.PrivKey.Value
-	} else if !bip39.IsMnemonicValid(mnemonic) {
-		panic("invalid mnemonic")
-	}
-	// Init consensus keys and related tx infos
-	exoclient.Init(mnemonic, privBase64, confExocore.ChainID, standalone)
-	return exoclient.CreateGrpcConn(confExocore.Rpc)
 }
 
 // triggerFeeders will trigger tokenFeeder based on arrival events to check and send create-price tx to update prices onto exocore chain
@@ -408,11 +384,12 @@ func triggerFeeders(r exoclient.ReCh, fInfo *feederInfo, event eventRes, oracleP
 
 // initializeNativeRestkingStakers initialize stakers' validator list since we wrap validator set into one single staker for each native-restaking-asset
 func initializeNativeRestakingStakers(cc *grpc.ClientConn) map[string][]*oracleTypes.StakerInfo {
+	logger := getLogger()
 	ret := make(map[string][]*oracleTypes.StakerInfo)
 	for _, v := range types.NativeRestakings {
 		stakerInfos, err := exoclient.GetStakerInfos(cc, types.AssetIDMap[v[1]])
 		for err != nil {
-			log.Println("Fail to get stakerInfos, retrying...")
+			logger.Error("Fail to get stakerInfos, retrying...", "error", err)
 			stakerInfos, err = exoclient.GetStakerInfos(cc, types.NativeTokenETHAssetID)
 			time.Sleep(2 * time.Second)
 		}

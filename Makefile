@@ -32,3 +32,5 @@ release:
 
 build:
 	go build -o ./build/price-feeder
+
+.PHONY: build

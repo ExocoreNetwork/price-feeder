@@ -4,3 +4,6 @@ configs/
 node*.log
 pids
 build/
+fetcher/beaconchain/oracle_env_beaconchain.yaml
+fetcher/chainlink/oracle_env_chainlink.yaml
+fetcher/configs/*.yaml

@@ -13,16 +13,23 @@ import (
 	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/beaconchain"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"go.uber.org/atomic"
 )
 
 const defaultInterval = 30 * time.Second
 
-var sourcesMap sync.Map
-var tokensMap sync.Map
+var (
+	sourcesMap sync.Map
+	tokensMap  sync.Map
+	logger     feedertypes.LoggerInf
+)
 
 // Init initializes the fetcher with sources and tokens
-func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
+func Init(sourcesIn, tokensIn []string, sourcesPath string) (*Fetcher, error) {
+	if logger = feedertypes.GetLogger("fetcher"); logger == nil {
+		panic("logger is not initialized")
+	}
 	sourceIDs := make([]string, 0)
 	for _, tName := range tokensIn {
 		tName = strings.ToLower(tName)
@@ -54,8 +61,12 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 		s := &source{name: sName, tokens: &sync.Map{}, running: atomic.NewInt32(-1), stopCh: make(chan struct{}), stopResCh: make(chan struct{})}
 
 		// init source's fetcher
-		reflect.ValueOf(types.InitFetchers[sName]).Call([]reflect.Value{reflect.ValueOf(sourcesPath)})
-		s.fetch = reflect.ValueOf(types.Fetchers[sName]).Interface().(types.FType)
+		if err := types.InitFetchers[sName](sourcesPath); err != nil {
+			logger.Error("failed to init fetcher", "soure_name", sName, "error", err)
+			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to init fetcher: %s", sName))
+		}
+
+		s.fetch = types.Fetchers[sName]
 
 		s.tokens.Store(tName, types.NewPriceSyc())
 
@@ -89,7 +100,7 @@ func Init(sourcesIn, tokensIn []string, sourcesPath string) *Fetcher {
 			sourceName string
 			tokenName  string
 		}),
-	}
+	}, nil
 }
 
 // source is the data source to fetch token prices

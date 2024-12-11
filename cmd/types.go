@@ -1,6 +1,9 @@
 package cmd
 
-import oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+import (
+	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+)
 
 // Define the types for the feeder
 type feederParams struct {
@@ -53,4 +56,8 @@ func (f *feederParams) update(p oracletypes.Params) (updated bool) {
 		updated = true
 	}
 	return
+}
+
+func getLogger() feedertypes.LoggerInf {
+	return feedertypes.GetLogger("")
 }

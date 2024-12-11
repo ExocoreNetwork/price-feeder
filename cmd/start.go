@@ -6,19 +6,13 @@ package cmd
 import (
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
 	mnemonic string
 	conf     feedertypes.Config
 )
-
-type PrivValidatorKey struct {
-	Address string `json:"address"`
-	PrivKey struct {
-		Value string `json:"value"`
-	} `json:"priv_key"`
-}
 
 // startCmd represents the start command
 var startCmd = &cobra.Command{
@@ -31,7 +25,8 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		logger := feedertypes.NewLogger(zapcore.InfoLevel)
 		// start fetcher to get prices from chainlink
-		RunPriceFeeder(conf, mnemonic, sourcesPath, true)
+		RunPriceFeeder(conf, logger, mnemonic, sourcesPath, true)
 	},
 }

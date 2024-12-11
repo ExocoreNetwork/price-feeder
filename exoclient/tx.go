@@ -2,24 +2,16 @@ package exoclient
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"time"
 
-	"github.com/ExocoreNetwork/exocore/app"
 	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"github.com/evmos/evmos/v16/encoding"
 
-	cryptoed25519 "crypto/ed25519"
-
-	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
-	"cosmossdk.io/simapp/params"
-	cmdcfg "github.com/ExocoreNetwork/exocore/cmd/config"
 	"github.com/cosmos/cosmos-sdk/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
@@ -27,53 +19,6 @@ import (
 
 	"google.golang.org/grpc"
 )
-
-const (
-	Chainlink      uint64 = 1
-	denom                 = "aexo"
-	layout                = "2006-01-02 15:04:05"
-	defaultChainID        = "exocoretestnet_233-1"
-)
-
-var (
-	chainID         string
-	encCfg          params.EncodingConfig
-	txCfg           client.TxConfig
-	defaultGasPrice int64
-	blockMaxGas     uint64
-
-	privKey cryptotypes.PrivKey
-	pubKey  cryptotypes.PubKey
-)
-
-// Init intialize the exoclient with configuration including consensuskey info, chainID
-func Init(mnemonic, privBase64, cID string, standalone bool) {
-	if standalone {
-		config := sdk.GetConfig()
-		cmdcfg.SetBech32Prefixes(config)
-	}
-	encCfg = encoding.MakeConfig(app.ModuleBasics)
-	txCfg = encCfg.TxConfig
-
-	if len(mnemonic) > 0 {
-		privKey = ed25519.GenPrivKeyFromSecret([]byte(mnemonic))
-		pubKey = privKey.PubKey()
-	} else {
-		privBytes, _ := base64.StdEncoding.DecodeString(privBase64)
-		privKey = &ed25519.PrivKey{
-			Key: cryptoed25519.PrivateKey(privBytes),
-		}
-		pubKey = privKey.PubKey()
-	}
-	if len(cID) == 0 {
-		chainID = defaultChainID
-	}
-	chainID = cID
-	defaultGasPrice = int64(7)
-	// TODO: set from exocore's params
-
-	blockMaxGas = 0
-}
 
 // signMsg signs the message with consensusskey
 func signMsg(cc *grpc.ClientConn, gasPrice int64, msgs ...sdk.Msg) authsigning.Tx {

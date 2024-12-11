@@ -28,6 +28,12 @@ var (
 	eventNewBlock      = fmt.Sprintf(sub, subTypeNewBlock)
 	eventTxPrice       = fmt.Sprintf(sub, subTypeTxUpdatePrice)
 	eventTxNativeToken = fmt.Sprintf(sub, subTypeTxNativeToken)
+
+	events = map[string]bool{
+		eventNewBlock:      true,
+		eventTxPrice:       true,
+		eventTxNativeToken: true,
+	}
 )
 
 type result struct {
@@ -70,6 +76,7 @@ type ReCh struct {
 
 // setup ws connection, and subscribe newblock events
 func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan struct{}) {
+	// logger := getLogger()
 	u, err := url.Parse(remoteAddr)
 	if err != nil {
 		panic(err)
@@ -104,7 +111,7 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 		for {
 			_, data, err := conn.ReadMessage()
 			if err != nil {
-				fmt.Println("read err:", err)
+				logger.Error("read from publisher failed", "error", err)
 				if !websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
 					return
 				}
@@ -113,15 +120,15 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 				// reconnect ws
 				attempt := 0
 				for ; err != nil; conn, _, err = dialer.Dial("ws://"+host+endpoint, rHeader) {
-					fmt.Printf("failed to reconnect with error:%s, retrying...%d", err, attempt)
+					logger.Error("failed to reconnect to publisher, retrying...", "error", err, "attempt_count", attempt)
 					time.Sleep(reconnectInterval * time.Second)
 					attempt++
 					if attempt > maxRetry {
-						fmt.Println("failed to reconnect after max retry")
+						logger.Error("failed to reconnect to publisher after max retry")
 						return
 					}
 				}
-				fmt.Println("reconnected.")
+				logger.Info("reconnected to publisher successfully.")
 				conn.SetPongHandler(func(string) error {
 					return nil
 				})
@@ -135,12 +142,12 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 					if err = conn.WriteMessage(websocket.TextMessage, []byte(eventNewBlock)); err == nil {
 						break
 					}
-					fmt.Printf("failed to subscribe event with error:%s, retrying...%d", err, attempt)
+					logger.Error("failed to subscribe to new_block event, retrying", "error", err, "attempt_cout", attempt)
 					time.Sleep(1 * time.Second)
 					attempt++
 				}
 				if attempt == maxRetry {
-					fmt.Println("fail to subscribe event after max retry")
+					logger.Error("fail to subscribe new_block event after max retry")
 					return
 				}
 				continue
@@ -148,7 +155,7 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 			var response result
 			err = json.Unmarshal(data, &response)
 			if err != nil {
-				fmt.Println("failed to parse response")
+				logger.Error("failed to pase response from publisher, skip", "error", err)
 				continue
 			}
 			rec := ReCh{}
@@ -190,16 +197,17 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 
 	// write message to subscribe tx event for price update
 	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventTxPrice)); err != nil {
-		panic("fail to subscribe event_tx")
+		panic("fail to subscribe tx event")
 	}
+
 	// write message to subscribe tx event for native token validator list change
 	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventTxPrice)); err != nil {
-		panic("fail to subscribe event_tx")
+		panic("fail to subscribe tx event")
 	}
 
 	// write message to subscribe newBlock event
 	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventNewBlock)); err != nil {
-		panic("fail to subscribe event")
+		panic("fail to subscribe new_block event")
 	}
 
 	// write routine sends ping messages every 10 seconds
@@ -209,6 +217,7 @@ func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan st
 
 // writeRoutine sends ping messages every 10 second
 func writeRoutine(conn *websocket.Conn, stop chan struct{}) {
+	// logger := getLogger()
 	ticker := time.NewTicker(10 * time.Second)
 	defer func() {
 		ticker.Stop()
@@ -225,10 +234,33 @@ func writeRoutine(conn *websocket.Conn, stop chan struct{}) {
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
 			); err != nil {
-				fmt.Println("close err:", err)
+				logger.Error("failed to write close message to publisher", "error", err)
 				return
 			}
 		}
 	}
+}
 
+func ResetEvents() {
+	for event, _ := range events {
+		events[event] = true
+	}
+}
+
+func SubEvents(conn *websocket.Conn, retryCount int, retryInterval time.Duration) {
+	// logger := getLogger()
+	for event, ok := range events {
+		retryCount--
+		if ok {
+			if err := conn.WriteMessage(websocket.TextMessage, []byte(event)); err == nil {
+				logger.Info("subscribes event succussfully", "event", event)
+				events[event] = false
+			}
+		}
+		if retryCount == 0 {
+			logger.Error("failed to subscribe to all events", "events", events)
+			panic("fail to subscribe events")
+		}
+		time.Sleep(retryInterval * time.Second)
+	}
 }

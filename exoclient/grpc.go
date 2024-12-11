@@ -7,7 +7,7 @@ import (
 )
 
 // CreateGrpcConn creates an grpc connection to the target
-func CreateGrpcConn(target string) *grpc.ClientConn {
+func CreateGrpcConn(target string) (*grpc.ClientConn, error) {
 	grpcConn, err := grpc.Dial(
 		target,
 		// for internal usage, no need to set TSL
@@ -15,8 +15,9 @@ func CreateGrpcConn(target string) *grpc.ClientConn {
 		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(encCfg.InterfaceRegistry).GRPCCodec())),
 	)
 	if err != nil {
-		panic(err)
+		logger.Error("failed to create grpc connect", "error", err)
+		return nil, err
 	}
 
-	return grpcConn
+	return grpcConn, nil
 }

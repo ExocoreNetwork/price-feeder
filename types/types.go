@@ -5,7 +5,73 @@ import (
 	"os"
 
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
+
+type PrivValidatorKey struct {
+	Address string `json:"address"`
+	PrivKey struct {
+		Value string `json:"value"`
+	} `json:"priv_key"`
+}
+
+type LoggerInf interface {
+	Info(msg string, keyvals ...interface{})
+	Debug(msg string, keyvals ...interface{})
+	Error(msg string, keyvals ...interface{})
+
+	With(keyvals ...interface{}) LoggerInf
+}
+
+var logger LoggerInf = NewLogger(zapcore.InfoLevel)
+
+type LoggerWrapper struct {
+	*zap.SugaredLogger
+}
+
+func (l *LoggerWrapper) Info(msg string, keyvals ...interface{}) {
+	l.Infow(msg, keyvals...)
+}
+func (l *LoggerWrapper) Debug(msg string, keyvals ...interface{}) {
+	l.Debugw(msg, keyvals...)
+}
+func (l *LoggerWrapper) Error(msg string, keyvals ...interface{}) {
+	l.Errorw(msg, keyvals...)
+}
+func (l *LoggerWrapper) With(keyvals ...interface{}) LoggerInf {
+	return &LoggerWrapper{
+		l.SugaredLogger.With(keyvals...),
+	}
+}
+
+func NewLogger(level zapcore.Level) *LoggerWrapper {
+	config := zap.NewProductionConfig()
+	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
+	config.Encoding = "console"
+	config.Level = zap.NewAtomicLevelAt(level)
+	logger, _ := config.Build()
+	return &LoggerWrapper{
+		logger.Sugar(),
+	}
+}
+
+func SetLogger(l LoggerInf) LoggerInf {
+	if l != nil {
+		logger = l
+	}
+	return logger
+}
+
+func GetLogger(component string) LoggerInf {
+	if logger == nil {
+		return nil
+	}
+	if len(component) > 0 {
+		return logger.With("component", component)
+	}
+	return logger
+}
 
 type Err struct {
 	parent  *Err
