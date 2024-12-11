@@ -129,7 +129,7 @@ var (
 
 	getValidatorsPath = "eth/v1/beacon/states/%s/validators"
 	urlEndpoint       *url.URL
-	slotsPerEpoch     uint64
+	slotsPerEpoch     = uint64(32)
 )
 
 func init() {
