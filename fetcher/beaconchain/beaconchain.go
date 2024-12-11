@@ -165,12 +165,12 @@ func Init(confPath string) error {
 	// parse nstID by splitting it
 	nstID := strings.Split(cfg.NSTID, "_")
 	if len(nstID) != 2 {
-		return feedertypes.ErrInitFail.Wrap("invalid nstID format")
+		panic("invalid nstID format")
 	}
 	// the second element is the lzID of the chain
-	lzID, err := strconv.ParseUint(nstID[1], 16, 64)
+	lzID, err := strconv.ParseUint(strings.TrimPrefix(nstID[1], "0x"), 16, 64)
 	if err != nil {
-		return feedertypes.ErrInitFail.Wrap(err.Error())
+		panic("failed to parse lzID")
 	}
 	if slotsPerEpochKnown, ok := types.ChainToSlotsPerEpoch[lzID]; ok {
 		slotsPerEpoch = slotsPerEpochKnown
