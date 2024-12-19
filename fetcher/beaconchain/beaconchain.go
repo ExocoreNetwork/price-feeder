@@ -169,7 +169,7 @@ func ResetStakerValidatorsForAll(stakerInfos []*oracletypes.StakerInfo) {
 	lock.Unlock()
 }
 
-func Fetch(token string) (*types.PriceInfo, error) {
+func (s *source) fetch(token string) (*types.PriceInfo, error) {
 	// check epoch, when epoch updated, update effective-balance
 	if token != types.NativeTokenETH {
 		logger.Error("only support native-eth-restaking", "expect", types.NativeTokenETH, "got", token)
@@ -250,6 +250,11 @@ func Fetch(token string) (*types.PriceInfo, error) {
 		Price:   string(latestChangesBytes),
 		RoundID: strconv.FormatUint(finalizedEpoch, 10),
 	}, nil
+}
+
+// TODO: to be implemented
+func (s *source) reload(token, cfgPath string) error {
+	return nil
 }
 
 func convertBalanceChangeToBytes(stakerChanges [][]int) []byte {

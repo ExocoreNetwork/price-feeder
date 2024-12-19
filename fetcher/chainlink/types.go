@@ -1,6 +1,7 @@
 package chainlink
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -15,6 +16,13 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type source struct {
+	logger feedertypes.LoggerInf
+	*types.Source
+	chainlinkProxy *proxy
+	clients        map[string]*ethclient.Client
+}
+
 type Config struct {
 	URLs     map[string]string `yaml:"urls"`
 	Tokens   map[string]string `yaml:"tokens"`
@@ -22,85 +30,105 @@ type Config struct {
 }
 
 type proxy struct {
-	lock        sync.RWMutex
+	locker      *sync.RWMutex
+	clients     map[string]*ethclient.Client
 	aggregators map[string]*aggregatorv3.AggregatorV3Interface
 }
 
-const envConf = "oracle_env_chainlink.yaml"
-
 func newProxy() *proxy {
 	return &proxy{
+		locker:      new(sync.RWMutex),
 		aggregators: make(map[string]*aggregatorv3.AggregatorV3Interface),
+		clients:     make(map[string]*ethclient.Client),
 	}
 }
 
-func (p *proxy) add(tokens map[string]string) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+func (p *proxy) addToken(tokens map[string]string) error {
+	p.locker.Lock()
+	defer p.locker.Unlock()
 	for token, address := range tokens {
 		addrParsed := strings.Split(strings.TrimSpace(address), "_")
-		if ok := isContractAddress(addrParsed[0], clients[addrParsed[1]]); !ok {
-			logger.Error("address tried to be added as chainlink proxy is not a contract address", "address", addrParsed[0], "chain", addrParsed[1])
+		if ok := isContractAddress(addrParsed[0], p.clients[addrParsed[1]]); !ok {
 			return fmt.Errorf("address %s is not a contract address on chain:%s\n", addrParsed[0], addrParsed[1])
 		}
 		var err error
-		if p.aggregators[strings.ToLower(token)], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(addrParsed[0]), clients[addrParsed[1]]); err != nil {
-			logger.Error("failed to newAggregator of chainlink", "address", common.HexToAddress(addrParsed[0]), "chain", addrParsed[1], "error", err)
+		if p.aggregators[strings.ToLower(token)], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(addrParsed[0]), p.clients[addrParsed[1]]); err != nil {
+			return fmt.Errorf("failed to newAggregator from address:%s on chain:%s of chainlink, error:%w", common.HexToAddress(addrParsed[0]), addrParsed[1], err)
 			return err
 		}
 	}
 	return nil
 }
 
+// addClient adds an ethClient, it will skip if the network exists in current clients
+// does not need to be guard by lock
+func (p *proxy) addClient(network, url string) error {
+	//	p.locker.Lock()
+	//	defer p.locker.Unlock()
+	var err error
+	if _, ok := p.clients[network]; !ok {
+		if len(url) == 0 {
+			return errors.New("url is empty")
+		}
+		p.clients[network], err = ethclient.Dial(url)
+	}
+	return err
+}
+
 func (p *proxy) get(token string) (*aggregatorv3.AggregatorV3Interface, bool) {
-	p.lock.RLock()
+	p.locker.RLock()
 	aggregator, ok := p.aggregators[token]
-	p.lock.RUnlock()
+	p.locker.RUnlock()
 	return aggregator, ok
 }
 
+const envConf = "oracle_env_chainlink.yaml"
+
 var (
-	logger     feedertypes.LoggerInf
-	configPath string
+	defaultSource *source
+	logger        feedertypes.LoggerInf
 )
 
 func init() {
-	types.InitFetchers[types.Chainlink] = initChainlink
+	types.SourceInitializers[types.Chainlink] = initChainlink
 }
 
-func initChainlink(confPath string) error {
+func initChainlink(cfgPath string) (types.SourceInf, error) {
 	if logger = feedertypes.GetLogger("fetcher_chainlink"); logger == nil {
-		return feedertypes.ErrInitFail.Wrap("logger is not initialized")
+		return nil, feedertypes.ErrInitFail.Wrap("logger is not initialized")
 	}
-	configPath = confPath
-	cfg, err := parseConfig(configPath)
+	cfg, err := parseConfig(cfgPath)
 	if err != nil {
-		logger.Error("failed to parse config file", "path", configPath, "error", err)
-		return feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to parse config file, path;%s, error:%s", configPath, err))
+		return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to parse config file, path;%s, error:%s", cfgPath, err))
 	}
+	defaultSource = &source{
+		logger:         logger,
+		clients:        make(map[string]*ethclient.Client),
+		chainlinkProxy: newProxy(),
+	}
+	// add ethClients
 	for network, url := range cfg.URLs {
 		if len(url) == 0 {
-			logger.Error("rpcURL is empty. check the oracle_env_chainlink.yaml")
-			return feedertypes.ErrInitFail.Wrap("rpcURL from config is empty")
+			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("rpcURL from config is empty, config_file:%s", envConf))
 		}
-		clients[network], err = ethclient.Dial(url)
+		network = strings.ToLower(network)
+		err = defaultSource.chainlinkProxy.addClient(network, url)
 		if err != nil {
-			logger.Error("failed to initialize ethClient", "url", url, "error", err)
-			return feedertypes.ErrInitFail.Wrap(fmt.Sprintf("fail to initialize ethClient, url:%s, erro:%s", url, err))
+			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("fail to initialize ethClient, url:%s, error:%s", url, err))
 		}
 	}
 
-	if err = chainlinkProxy.add(cfg.Tokens); err != nil {
-		logger.Error("failed to add chainlinkPriceFeedProxy", "error", err, "tokens", cfg.Tokens)
-		return feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to add chainlinkPriceFeedProxy, error:%v", err))
+	// add proxy for tokens
+	if err = defaultSource.chainlinkProxy.addToken(cfg.Tokens); err != nil {
+		return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to add chainlinkPriceFeedProxy for token:%s, error:%v", cfg.Tokens, err))
 	}
 
-	types.Fetchers[types.Chainlink] = Fetch
-	return nil
+	defaultSource.Source = types.NewSource(logger, types.Chainlink, defaultSource.fetch, cfgPath, defaultSource.reload)
+	return defaultSource, nil
 }
 
-func parseConfig(confPath string) (Config, error) {
-	yamlFile, err := os.Open(path.Join(confPath, envConf))
+func parseConfig(cfgPath string) (Config, error) {
+	yamlFile, err := os.Open(path.Join(cfgPath, envConf))
 	if err != nil {
 		return Config{}, err
 	}

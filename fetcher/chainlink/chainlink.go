@@ -9,65 +9,27 @@ import (
 	"time"
 
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-var (
-	clients = make(map[string]*ethclient.Client)
-	// token-> proxycontract
-	chainlinkProxy = newProxy()
-)
-
-func Fetch(token string) (*types.PriceInfo, error) {
-	chainlinkPriceFeedProxy, ok := chainlinkProxy.get(token)
+func (s *source) fetch(token string) (*types.PriceInfo, error) {
+	chainlinkPriceFeedProxy, ok := s.chainlinkProxy.get(token)
 	if !ok {
-		// reload config to add new token
-		// TODO: this is not concurrent safe, if multiple tokens are fetching conconrrently, the access to chainlinkProxy sould be synced
-		logger.Error("chainlinkPriceFeedProxy not found, try to reload form chainlink config file and skip this round of fetching price", "token", token)
-		go func() {
-			// TODO: limit maximum reloading simultaneously
-			err := errors.New("start reload")
-			success := false
-			var cfg Config
-			for err != nil {
-				if cfg, err = parseConfig(configPath); err != nil {
-					logger.Error("failed to parse config file of source chalink", "error", err, "config_path", configPath)
-					time.Sleep(10 * time.Second)
-					continue
-				}
-				for tName, address := range cfg.Tokens {
-					if token == strings.ToLower(tName) {
-						if err = chainlinkProxy.add(map[string]string{token: address}); err != nil {
-							logger.Error("failed to add chainlinkPriceFeedProxy, wait for 10 seconds and try again to reload chalink config file", "token", token, "error", err, "config_path", configPath)
-							time.Sleep(10 * time.Second)
-						} else {
-							success = true
-							logger.Info("scuccessed to add new chainlinkPriceFeedProxy, it will be active for next round fetching price", "token", token)
-						}
-						break
-					}
-				}
-			}
-			if !success {
-				logger.Error("failed to find info for chainlinkPriceFeedProxy in chainlink config file, please update that file and it will be reloaded on next round", "token", token, "config_path", configPath)
-			}
-		}()
-		return nil, fmt.Errorf("there's no active chainlinkPriceFeedProxy for token:%s", token)
+		return nil, feedertypes.ErrSrouceTokenNotConfigured.Wrap(fmt.Sprintf("failed to get chainlinkProxy for token:%s for not set", token))
 	}
 
 	roundData, err := chainlinkPriceFeedProxy.LatestRoundData(&bind.CallOpts{})
 	if err != nil {
-		logger.Error("failed to get LatestRoundData from chainlink", "token", token, "error", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get LatestRoundData of token:%s from chainlink, error:%w", token, err)
 	}
 
 	decimals, err := chainlinkPriceFeedProxy.Decimals(&bind.CallOpts{})
 	if err != nil {
-		logger.Error("failed to get decimal from chainlinkPriceFeedProxy", "token", token, "error", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get decimals, error:%w", err)
 	}
 
 	return &types.PriceInfo{
@@ -101,20 +63,25 @@ func isContractAddress(addr string, client *ethclient.Client) bool {
 	return len(bytecode) > 0
 }
 
-// func formatTime(timestamp *big.Int) time.Time {
-// 	timestampInt64 := timestamp.Int64()
-// 	if timestampInt64 == 0 {
-// 		log.Fatalf("timestamp %v cannot be represented as int64", timestamp)
-// 	}
-// 	return time.Unix(timestampInt64, 0)
-// }
-//
-// func divideBigInt(num1 *big.Int, num2 *big.Int) *big.Float {
-// 	if num2.BitLen() == 0 {
-// 		log.Fatal("cannot divide by zero.")
-// 	}
-// 	num1BigFloat := new(big.Float).SetInt(num1)
-// 	num2BigFloat := new(big.Float).SetInt(num2)
-// 	result := new(big.Float).Quo(num1BigFloat, num2BigFloat)
-// 	return result
-// }
+func (s *source) reload(cfgPath string, token string) error {
+	cfg, err := parseConfig(cfgPath)
+	if err != nil {
+		return errors.New("failed to path config file")
+	}
+	// add new network from config file
+	for network, url := range cfg.URLs {
+		network = strings.ToLower(network)
+		if err := s.chainlinkProxy.addClient(network, url); err != nil {
+			return fmt.Errorf("failed to add ethClient for network:%s with url:%s, error:%w", network, url, err)
+		}
+	}
+	// add proxy for new token matches the required token if found
+	for tName, tContract := range cfg.Tokens {
+		tName = strings.ToLower(tName)
+		if strings.EqualFold(tName, token) {
+			s.chainlinkProxy.addToken(map[string]string{tName: tContract})
+			return nil
+		}
+	}
+	return errors.New("token not found in reloaded config filed")
+}

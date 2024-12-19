@@ -3,6 +3,7 @@ package beaconchain
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -26,6 +27,10 @@ import (
 //		validators []string
 //	}
 
+type source struct {
+	logger feedertypes.LoggerInf
+	*types.Source
+}
 type config struct {
 	URL   string `yaml:"url"`
 	NSTID string `yaml:"nstid"`
@@ -40,46 +45,49 @@ type ResultConfig struct {
 const (
 	envConf               = "oracle_env_beaconchain.yaml"
 	urlQuerySlotsPerEpoch = "eth/v1/config/spec"
+	hexPrefix             = "0x"
 )
 
 var (
-	logger feedertypes.LoggerInf
-	lock   sync.RWMutex
+	logger        feedertypes.LoggerInf
+	lock          sync.RWMutex
+	defaultSource *source
 
 	// errors
 	errTokenNotSupported = errors.New("token not supported")
 )
 
 func init() {
-	types.InitFetchers[types.BeaconChain] = initBeaconchain
+	types.SourceInitializers[types.BeaconChain] = initBeaconchain
 }
 
-func initBeaconchain(confPath string) error {
+func initBeaconchain(cfgPath string) (types.SourceInf, error) {
+	// init logger, panic immediately if logger has not been set properly
 	if logger = feedertypes.GetLogger("fetcher_beaconchain"); logger == nil {
 		panic("logger is not initialized")
 	}
-	cfg, err := parseConfig(confPath)
+
+	// init from config file
+	cfg, err := parseConfig(cfgPath)
 	if err != nil {
-		logger.Error("fail to parse config", "error", err, "path", confPath)
-		return feedertypes.ErrInitFail.Wrap(err.Error())
+		// logger.Error("fail to parse config", "error", err, "path", cfgPath)
+		return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to parse config, error:%v", err))
 	}
+	// beaconchain endpoint url
 	urlEndpoint, err = url.Parse(cfg.URL)
 	if err != nil {
-		logger.Error("failed to parse beaconchain URL", "url", cfg.URL)
-		return feedertypes.ErrInitFail.Wrap(err.Error())
+		return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to parse url:%s, error:%v", cfg.URL, err))
 	}
 
-	// parse nstID by splitting it
+	// parse nstID by splitting it with "_'"
 	nstID := strings.Split(cfg.NSTID, "_")
 	if len(nstID) != 2 {
-		logger.Error("invalid nstID format, should be: x_y", "nstID", nstID)
-		return feedertypes.ErrInitFail.Wrap("invalid nstID format")
+		return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("invalid nstID format, nstID:%s", nstID))
 	}
-	// the second element is the lzID of the chain
-	lzID, err := strconv.ParseUint(strings.TrimPrefix(nstID[1], "0x"), 16, 64)
+	// the second element is the lzID of the chain, trim possible prefix_0x
+	lzID, err := strconv.ParseUint(strings.TrimPrefix(nstID[1], hexPrefix), 16, 64)
 	if err != nil {
-		logger.Error("failed to pase lzID from nstID", "got_nstID", nstID[1], "error", err)
-		return feedertypes.ErrInitFail.Wrap(err.Error())
+		return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to parse lzID:%s from nstID, error:%v", nstID[1], err))
 	}
 
 	// set slotsPerEpoch
@@ -90,29 +98,33 @@ func initBeaconchain(confPath string) error {
 		u := urlEndpoint.JoinPath(urlQuerySlotsPerEpoch)
 		res, err := http.Get(u.String())
 		if err != nil {
-			logger.Error("failed to get slotsPerEpoch from endpoint", "error", err, "url", u.String())
-			return feedertypes.ErrInitFail.Wrap(err.Error())
+			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to get slotsPerEpoch from endpoint:%s, error:%v", u.String(), err))
 		}
 		result, err := io.ReadAll(res.Body)
 		if err != nil {
-			logger.Error("failed to read response from slotsPerEpoch", "error", err)
-			return feedertypes.ErrInitFail.Wrap(err.Error())
+			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to get slotsPerEpoch from endpoint:%s, error:%v", u.String(), err))
 		}
 		var re ResultConfig
 		if err = json.Unmarshal(result, &re); err != nil {
-			logger.Error("failed to parse response from slotsPerEpoch", "erro", err)
-			return feedertypes.ErrInitFail.Wrap(err.Error())
+			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to parse response from slotsPerEpoch, error:%v", err))
 		}
 		if slotsPerEpoch, err = strconv.ParseUint(re.Data.SlotsPerEpoch, 10, 64); err != nil {
-			logger.Error("failed to parse response_slotsPerEpoch", "got_res.data.slotsPerEpoch", re.Data.SlotsPerEpoch)
-			return feedertypes.ErrInitFail.Wrap(err.Error())
+			return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to parse response_slotsPerEoch, got:%s, rror:%v", re.Data.SlotsPerEpoch, err))
 		}
 	}
 
-	types.UpdateNativeAssetID(cfg.NSTID)
-	types.Fetchers[types.BeaconChain] = Fetch
+	defaultSource := &source{
+		logger: logger,
+		Source: types.NewSource(logger, types.BeaconChain, defaultSource.fetch, cfgPath, defaultSource.reload),
+	}
 
-	return nil
+	// initialize native-restaking stakers' beaconchain-validator list
+
+	// update nst assetID to be consistent with exocored. for beaconchain it's about different lzID
+	types.UpdateNativeAssetID(cfg.NSTID)
+	//	types.Fetchers[types.BeaconChain] = Fetch
+
+	return defaultSource, nil
 }
 
 func parseConfig(confPath string) (config, error) {

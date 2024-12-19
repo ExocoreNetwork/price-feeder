@@ -1,23 +1,36 @@
 package exoclient
 
 import (
+	"context"
+	"fmt"
+	"time"
+
+	"cosmossdk.io/simapp/params"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 )
 
 // CreateGrpcConn creates an grpc connection to the target
-func CreateGrpcConn(target string) (*grpc.ClientConn, error) {
-	grpcConn, err := grpc.Dial(
+func createGrpcConn(target string, encCfg params.EncodingConfig) (conn *grpc.ClientConn, cancelFunc func(), err error) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	grpcConn, err := grpc.DialContext(
+		ctx,
 		target,
 		// for internal usage, no need to set TSL
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(encCfg.InterfaceRegistry).GRPCCodec())),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                30 * time.Second,
+			Timeout:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
 	)
 	if err != nil {
-		logger.Error("failed to create grpc connect", "error", err)
-		return nil, err
+		return nil, nil, fmt.Errorf("failed to create grpc connection, error:%w", err)
 	}
 
-	return grpcConn, nil
+	return grpcConn, cancel, nil
 }

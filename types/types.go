@@ -17,6 +17,28 @@ type PrivValidatorKey struct {
 	} `json:"priv_key"`
 }
 
+type TokenSources struct {
+	Token   string `mapstructure:"token"`
+	Sources string `mapstructure:"sources"`
+}
+
+type Config struct {
+	Tokens []TokenSources `mapstructure:"tokens"`
+	Sender struct {
+		Mnemonic string `mapstructure:"mnemonic"`
+		Path     string `mapstructure:"path"`
+	} `mapstructure:"sender"`
+	Exocore struct {
+		ChainID string `mapstructure:"chainid"`
+		AppName string `mapstructure:"appname"`
+		Rpc     string `mapstructure:"rpc"`
+		Ws      struct {
+			Addr     string `mapstructure:"addr"`
+			Endpoint string `mapstructure:"endpoint"`
+		} `mapstructure:"ws"`
+	} `mapstructure:"exocore"`
+}
+
 type LoggerInf log.Logger
 
 var logger log.Logger = NewLogger(zapcore.InfoLevel)
@@ -111,30 +133,36 @@ func (e *Err) Unwrap() error {
 	return e.parent
 }
 
-type Config struct {
-	Sources []string `mapstructure:"sources"`
-	Tokens  []string `mapstructure:"tokens"`
-	Sender  struct {
-		Mnemonic string `mapstructure:"mnemonic"`
-		Path     string `mapstructure:"path"`
-	} `mapstructure:"sender"`
-	Exocore struct {
-		ChainID string `mapstructure:"chainid"`
-		AppName string `mapstructure:"appname"`
-		Rpc     string `mapstructure:"rpc"`
-		Ws      struct {
-			Addr     string `mapstructure:"addr"`
-			Endpoint string `mapstructure:"endpoint"`
-		} `mapstructure:"ws"`
-	} `mapstructure:"exocore"`
-}
+// type Config struct {
+// 	Tokens []TokenSources `mapstructure:"tokens"`
+// 	//	Tokens []struct {
+// 	//		Token   string `mapstructure:"token"`
+// 	//		Sources string `mapstructure:"sources"`
+// 	//	} `mapstructure:"tokens"`
+// 	// Sources []string `mapstructure:"sources"`
+// 	// Tokens  []string `mapstructure:"tokens"`
+// 	Sender struct {
+// 		Mnemonic string `mapstructure:"mnemonic"`
+// 		Path     string `mapstructure:"path"`
+// 	} `mapstructure:"sender"`
+// 	Exocore struct {
+// 		ChainID string `mapstructure:"chainid"`
+// 		AppName string `mapstructure:"appname"`
+// 		Rpc     string `mapstructure:"rpc"`
+// 		Ws      struct {
+// 			Addr     string `mapstructure:"addr"`
+// 			Endpoint string `mapstructure:"endpoint"`
+// 		} `mapstructure:"ws"`
+// 	} `mapstructure:"exocore"`
+// }
 
 var (
 	ConfigFile        string
 	SourcesConfigPath string
 	v                 *viper.Viper
 
-	ErrInitFail = NewErr("Failed to initialization")
+	ErrInitFail                 = NewErr("Failed to initialization")
+	ErrSrouceTokenNotConfigured = NewErr("token not configured")
 )
 
 // InitConfig will only read path cfgFile once, and for reload after InitConfig, should use ReloadConfig

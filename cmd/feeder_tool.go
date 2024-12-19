@@ -12,6 +12,8 @@ import (
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"google.golang.org/grpc"
+	// cmdcfg "github.com/ExocoreNetwork/exocore/cmd/config"
+	// sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 const (
@@ -24,33 +26,42 @@ var updateConfig sync.Mutex
 
 // RunPriceFeeder runs price feeder to fetching price and feed to exocorechain
 func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemonic string, sourcesPath string, standalone bool) {
+	// init logger
 	if logger = feedertypes.SetLogger(logger); logger == nil {
 		panic("logger is not initialized")
 	}
+	// init logger, fetchers, exocoreclient
+	initComponents(logger, conf, standalone)
 
-	// init fetcher, start fetchers to get prices from sources
-	f, err := fetcher.Init(conf.Sources, conf.Tokens, sourcesPath)
-	if err != nil {
-		logger.Error("failed to init fetcher", "error", err)
-		panic(err)
-	}
+	f, _ := fetcher.GetFetcher()
 	// start fetching on all supported sources and tokens
+	logger.Info("start fetching prices from all sources")
 	_ = f.StartAll()
 
-	// init exoclient
-	cc, err := exoclient.Init(conf, mnemonic, privFile, standalone)
-	if err != nil {
-		logger.Error("failed to init exoclient", "error", err)
-		panic(err)
-	}
-	defer cc.Close()
+	// init fetcher, start fetchers to get prices from sources
+	// f, err := fetcher.Init(conf.Sources, conf.Tokens, sourcesPath)
+	// if err != nil {
+	// 	logger.Error("failed to init fetcher", "error", err)
+	// 	panic(err)
+	// }
+	// // start fetching on all supported sources and tokens
+	// _ = f.StartAll()
+
+	// // init exoclient
+	// cc, _, err := exoclient.Init(conf, mnemonic, privFile, standalone)
+	// if err != nil {
+	// 	logger.Error("failed to init exoclient", "error", err)
+	// 	panic(err)
+	// }
+	ecClient, _ := exoclient.GetClient()
+	defer ecClient.Close()
 	// initialize oracle params by querying from exocore
-	oracleP, err := exoclient.GetParams(cc)
+	oracleP, err := ecClient.GetParams()
 	for err != nil {
 		// retry forever until be interrupted manually
 		logger.Error("Failed to get oracle params on start, retrying...", err)
 		time.Sleep(2 * time.Second)
-		oracleP, err = exoclient.GetParams(cc)
+		oracleP, err = ecClient.GetParams()
 	}
 
 	// TODO: currently the getStakerInfos will return nil error when empty response, avoid infinite loop
@@ -399,4 +410,35 @@ func initializeNativeRestakingStakers(cc *grpc.ClientConn) map[string][]*oracleT
 		ret[v[1]] = stakerInfos
 	}
 	return ret
+}
+
+// initComponents, initialize fetcher, exoclient, it will panic if any initialization fialed
+func initComponents(logger feedertypes.LoggerInf, conf feedertypes.Config, standalone bool) {
+	// init fetcher, start fetchers to get prices from sources
+	err := fetcher.Init(conf.Tokens, sourcesPath)
+	if err != nil {
+		logger.Error("failed to init fetcher", "error", err)
+		panic(err)
+	}
+
+	// init exoclient
+	err = exoclient.Init(conf, mnemonic, privFile, standalone)
+	if err != nil {
+		logger.Error("failed to init exoclient", "error", err)
+		panic(err)
+	}
+
+	//	// start fetching on all supported sources and tokens
+	//	logger.Info("start fetching prices from all sources")
+	//	_ = f.StartAll()
+
+	cc, _, err := exoclient.CreateGrpcConn("")
+	_, err = exoclient.GetParams(cc)
+	for err != nil {
+		// retry forever until be interrupted manually
+		logger.Info("failed to get oracle params on start, retrying...", "error", err)
+		time.Sleep(2 * time.Second)
+		_, err = exoclient.GetParams(cc)
+	}
+	logger.Info("Initialization for price-feeder done")
 }
