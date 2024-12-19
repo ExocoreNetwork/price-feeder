@@ -32,10 +32,11 @@ type Config struct {
 		ChainID string `mapstructure:"chainid"`
 		AppName string `mapstructure:"appname"`
 		Rpc     string `mapstructure:"rpc"`
-		Ws      struct {
-			Addr     string `mapstructure:"addr"`
-			Endpoint string `mapstructure:"endpoint"`
-		} `mapstructure:"ws"`
+		Ws      string `mapstructure:"ws"`
+		//		Ws      struct {
+		//			Addr     string `mapstructure:"addr"`
+		//			Endpoint string `mapstructure:"endpoint"`
+		//		} `mapstructure:"ws"`
 	} `mapstructure:"exocore"`
 }
 

@@ -154,7 +154,7 @@ func Init(conf feedertypes.Config, mnemonic, privFile string, standalone bool) e
 	}
 
 	var err error
-	if defaultExoClient, err = NewExoClient(logger, confExocore.Rpc, privKey, encCfg, confExocore.ChainID); err != nil {
+	if defaultExoClient, err = NewExoClient(logger, confExocore.Rpc, confExocore.Ws, privKey, encCfg, confExocore.ChainID); err != nil {
 		return feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to NewExoClient, privKey:%v, chainID:%s, error:%v", privKey, confExocore.ChainID, err))
 	}
 

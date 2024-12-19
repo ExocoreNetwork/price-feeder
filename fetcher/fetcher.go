@@ -1,6 +1,7 @@
 package fetcher
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -118,17 +119,15 @@ func (f Fetcher) GetLatestPrice(source, token string) (types.PriceInfo, error) {
 	return result.price, result.err
 }
 
-func (f Fetcher) Start() {
+func (f Fetcher) Start() error {
 	f.locker.Lock()
 	if f.running {
 		f.locker.Unlock()
-		f.logger.Error("failed to start fetcher which is already running")
-		return
+		return errors.New("failed to start fetcher which is already running")
 	}
 	if len(f.sources) == 0 {
 		f.locker.Unlock()
-		f.logger.Error("failed to start fetcher with no sources set")
-		return
+		return errors.New("failed to start fetcher with no sources set")
 	}
 	priceList := make(map[string]map[string]*types.PriceSync)
 	for sName, source := range f.sources {
@@ -184,6 +183,7 @@ func (f Fetcher) Start() {
 			return
 		}
 	}()
+	return nil
 }
 
 func (f Fetcher) Stop() {
