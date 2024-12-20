@@ -66,6 +66,10 @@ func (ec exoClient) Subscribe() {
 	}()
 }
 
+func (ec exoClient) EventsCh() chan EventRes {
+	return ec.wsEventsCh
+}
+
 // startTasks establishes the ws connection and
 // 1. routine: send ping message
 // 2. subscribe to events

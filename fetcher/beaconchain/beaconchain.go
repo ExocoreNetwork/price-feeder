@@ -178,8 +178,7 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 	// check if finalized epoch had been updated
 	epoch, stateRoot, err := getFinalizedEpoch()
 	if err != nil {
-		logger.Error("fail to get finalized epoch from beaconchain", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("fail to get finalized epoch from beaconchain, error:%w", err)
 	}
 
 	// epoch not updated, just return without fetching since effective-balance has not changed
@@ -206,8 +205,7 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 			l -= 100
 			validatorBalances, err := getValidators(tmpValidatorPubkeys, stateRoot)
 			if err != nil {
-				logger.Error("failed to get validators from beaconchain", "error", err)
-				return nil, err
+				return nil, fmt.Errorf("failed to get validators from beaconchain, error:%w", err)
 			}
 			for _, validatorBalance := range validatorBalances {
 				stakerBalance += int(validatorBalance[1])
@@ -217,8 +215,7 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 		// validatorBalances, err := GetValidators(validatorIdxs, epoch)
 		validatorBalances, err := getValidators(vList.validators[i:], stateRoot)
 		if err != nil {
-			logger.Error("failed to get validators from beaconchain", "error", err)
-			return nil, err
+			return nil, fmt.Errorf("failed to get validators from beaconchain, error:%w", err)
 		}
 		for _, validatorBalance := range validatorBalances {
 			// this should be initialized from exocored
@@ -252,7 +249,7 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 	}, nil
 }
 
-// TODO: to be implemented
+// reload does nothing since beaconchain source only used to update the balance change for nsteth
 func (s *source) reload(token, cfgPath string) error {
 	return nil
 }

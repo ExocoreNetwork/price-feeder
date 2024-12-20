@@ -89,6 +89,14 @@ type addTokenRes struct {
 func (p PriceInfo) IsZero() bool {
 	return len(p.Price) == 0
 }
+func (p PriceInfo) Equal(price PriceInfo) bool {
+	if p.Price == price.Price &&
+		p.Decimal == price.Decimal &&
+		p.RoundID == price.RoundID {
+		return true
+	}
+	return false
+}
 
 func NewPriceSync() *PriceSync {
 	return &PriceSync{

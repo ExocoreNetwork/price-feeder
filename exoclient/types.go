@@ -34,6 +34,9 @@ type exoClientInf interface {
 	// Ws subscriber
 	Subscribe()
 }
+
+type EventType int
+
 type EventRes struct {
 	Height       string
 	Gas          string
@@ -42,6 +45,7 @@ type EventRes struct {
 	FeederIDs    string
 	TxHeight     string
 	NativeETH    string
+	Type         EventType
 }
 
 type SubscribeResult struct {
@@ -79,16 +83,16 @@ const (
 	layout           = "2006-01-02 15:04:05"
 )
 
+const (
+	NewBlock EventType = iota + 1
+	UpdatePrice
+	UpdateNST
+)
+
 var (
 	logger feedertypes.LoggerInf
 
 	blockMaxGas uint64
-	//	chainID     string
-	//	encCfg      params.EncodingConfig
-	//	txCfg       client.TxConfig
-
-	// privKey cryptotypes.PrivKey
-	// pubKey  cryptotypes.PubKey
 
 	defaultExoClient *exoClient
 )
