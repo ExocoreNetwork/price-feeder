@@ -103,6 +103,7 @@ func initChainlink(cfgPath string, l feedertypes.LoggerInf) (types.SourceInf, er
 	if err != nil {
 		return nil, feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to parse config file, path;%s, error:%s", cfgPath, err))
 	}
+	// init defaultSource
 	defaultSource = &source{
 		logger:         logger,
 		clients:        make(map[string]*ethclient.Client),

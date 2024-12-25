@@ -213,7 +213,9 @@ func initBeaconchain(cfgPath string, l feedertypes.LoggerInf) (types.SourceInf, 
 		}
 	}
 
-	defaultSource := &source{
+	// init first to get a fixed point for 'fetch' to refer to
+	defaultSource = &source{}
+	*defaultSource = source{
 		logger: logger,
 		Source: types.NewSource(logger, types.BeaconChain, defaultSource.fetch, cfgPath, defaultSource.reload),
 	}

@@ -147,8 +147,7 @@ func ResetAllStakerValidators(ec exoclient.ExoClientInf, logger feedertypes.Logg
 		return fmt.Errorf("failed to get stakerInfos for native-restaking-eth, error:%w", err)
 	}
 	if len(stakerInfos) > 0 {
-		f, _ := fetcher.GetFetcher()
-		if err := f.InitNSTStakerValidators(stakerInfos); err != nil {
+		if err := beaconchain.ResetStakerValidators(stakerInfos, true); err != nil {
 			return fmt.Errorf("failed to set stakerInfs for native-restaking-eth, error:%w", err)
 		}
 	}

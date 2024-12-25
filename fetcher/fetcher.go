@@ -7,8 +7,6 @@ import (
 	"sync"
 	"unicode"
 
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"github.com/ExocoreNetwork/price-feeder/fetcher/beaconchain"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 )
@@ -89,20 +87,6 @@ func (f *Fetcher) AddTokenForSourceUnBlocked(source, token string) {
 		token:  token,
 		result: res,
 	}
-}
-
-func (f *Fetcher) InitNSTStakerValidators(stakerInfos []*oracletypes.StakerInfo) error {
-	f.locker.Lock()
-	if f.running {
-		f.locker.Unlock()
-		return errors.New("failed to init staker's validatorList for nst on a running fetcher")
-	}
-	// TODO: refator this to avoid call beaconchain directly
-	if err := beaconchain.ResetStakerValidators(stakerInfos, true); err != nil {
-		return fmt.Errorf("failed to init staker's validaorList, error:%w", err)
-	}
-	f.locker.Unlock()
-	return nil
 }
 
 // GetLatestPrice return the queried price for the token from specified source
