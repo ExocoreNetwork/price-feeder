@@ -18,14 +18,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-var _ exoClientInf = &exoClient{}
+var _ ExoClientInf = &exoClient{}
 
 // exoClient implements exoClientInf interface to serve as a grpc client to interact with eoxored grpc service
 type exoClient struct {
 	logger   feedertypes.LoggerInf
 	grpcConn *grpc.ClientConn
-	// cancel used to cancel grpc connection
-	cancel func()
 
 	// params for sign/send transactions
 	privKey cryptotypes.PrivKey
@@ -48,7 +46,8 @@ type exoClient struct {
 	wsLock           *sync.Mutex
 	wsActiveRoutines *int
 	wsActive         *bool
-	wsEventsCh       chan EventRes
+	// wsEventsCh       chan EventRes
+	wsEventsCh chan EventInf
 
 	// client to query from exocored
 	oracleClient oracletypes.QueryClient
@@ -67,13 +66,14 @@ func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint string, pri
 		wsActive:         new(bool),
 		wsLock:           new(sync.Mutex),
 		wsStop:           make(chan struct{}),
-		wsEventsCh:       make(chan EventRes),
+		wsEventsCh:       make(chan EventInf),
 	}
 
 	var err error
-	ec.grpcConn, ec.cancel, err = createGrpcConn(endpoint, encCfg)
+	ec.logger.Info("establish grpc connection")
+	ec.grpcConn, err = createGrpcConn(endpoint, encCfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new Exoclient, endpoint:%s, error:%w", err)
+		return nil, feedertypes.ErrInitConnectionFail.Wrap(fmt.Sprintf("failed to create new Exoclient, endpoint:%s, error:%v", endpoint, err))
 	}
 
 	// setup txClient
@@ -91,9 +91,10 @@ func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint string, pri
 		},
 		Proxy: http.ProxyFromEnvironment,
 	}
+	ec.logger.Info("establish ws connection")
 	ec.wsClient, _, err = ec.wsDialer.Dial(wsEndpoint, http.Header{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create ws connection, error:%w", err)
+		return nil, feedertypes.ErrInitConnectionFail.Wrap(fmt.Sprintf("failed to create ws connection, error:%v", err))
 	}
 	ec.wsClient.SetPongHandler(func(string) error {
 		return nil
@@ -109,16 +110,14 @@ func (ec *exoClient) Close() {
 
 // Close close grpc connection
 func (ec *exoClient) CloseGRPC() {
-	if ec.cancel == nil {
-		return
-	}
-	ec.cancel()
+	ec.grpcConn.Close()
 }
 
 func (ec *exoClient) CloseWs() {
 	if ec.wsClient == nil {
 		return
 	}
+	ec.StopWsRoutines()
 	ec.wsClient.Close()
 }
 

@@ -11,21 +11,31 @@ import (
 )
 
 type subEvent string
+type eventQuery string
 
 const (
 	//	subTypeNewBlock      subType = "tm.event='NewBlock'"
 	//	subTypeTxUpdatePrice subType = "tm.event='Tx' AND create_price.price_update='success'"
 	//	subTypeTxNativeToken subType = "tm.event='Tx' AND create_price.native_token_update='update'"
-	subStr            = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
-	reconnectInterval = 3
-	maxRetry          = 600
-	success           = "success"
+	subStr                       = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
+	reconnectInterval            = 3
+	maxRetry                     = 600
+	success                      = "success"
+	eNewBlock         eventQuery = "tm.event='NewBlock'"
+	eTxUpdatePrice    eventQuery = "tm.event='Tx' AND create_price.price_update='success'"
+	eTxNativeToken    eventQuery = "tm.event='Tx' AND create_price.native_token_update='update'"
 )
 
 var (
-	subNewBlock      subEvent = subEvent(fmt.Sprintf(subStr, "tm.event='NewBlock'"))
-	subTxUpdatePrice subEvent = subEvent(fmt.Sprintf(subStr, "tm.event='Tx' AND create_price.price_update='success'"))
-	subTxNativeToken subEvent = subEvent(fmt.Sprintf(subStr, "tm.event='Tx' AND create_price.native_token_update='update'"))
+	// subNewBlock      subEvent = subEvent(fmt.Sprintf(subStr, "tm.event='NewBlock'"))
+	subNewBlock subEvent = subEvent(fmt.Sprintf(subStr, eNewBlock))
+	// subTxUpdatePrice subEvent = subEvent(fmt.Sprintf(subStr, "tm.event='Tx' AND create_price.price_update='success'"))
+	subTxUpdatePrice subEvent = subEvent(fmt.Sprintf(subStr, eTxUpdatePrice))
+	// subTxNativeToken subEvent = subEvent(fmt.Sprintf(subStr, "tm.event='Tx' AND create_price.native_token_update='update'"))
+	subTxNativeToken subEvent = subEvent(fmt.Sprintf(subStr, eTxNativeToken))
+	//	eNewBlock        subEvent = "tm.event='NewBlock'"
+	//	eTxUpdatePrice   subEvent = "tm.event='Tx' AND create_price.price_update='success'"
+	//	eTxNativeToken   subEvent = "tm.event='Tx' AND create_price.native_token_update='update'"
 
 	events = map[subEvent]bool{
 		subNewBlock:      true,
@@ -66,7 +76,7 @@ func (ec exoClient) Subscribe() {
 	}()
 }
 
-func (ec exoClient) EventsCh() chan EventRes {
+func (ec exoClient) EventsCh() chan EventInf {
 	return ec.wsEventsCh
 }
 
@@ -76,12 +86,12 @@ func (ec exoClient) EventsCh() chan EventRes {
 // 3. routine: read events from ws connection
 func (ec exoClient) startTasks() {
 	// ws connection stopped, reset subscriber
-	ec.logger.Info("establish ws connection")
-	if err := ec.connectWs(maxRetry); err != nil {
-		// continue
-		panic(fmt.Sprintf("failed to create ws connection after maxRetry:%d, error:%w", maxRetry, err))
-	}
-	// ec.markWsActive()
+	//ec.logger.Info("establish ws connection")
+	//	if err := ec.connectWs(maxRetry); err != nil {
+	//		// continue
+	//		panic(fmt.Sprintf("failed to create ws connection after maxRetry:%d, error:%w", maxRetry, err))
+	//	}
+	ec.markWsActive()
 	ec.logger.Info("subscribe to ws publish", "events", events)
 	if err := ec.sendAllSubscribeMsgs(maxRetry); err != nil {
 		panic(fmt.Sprintf("failed to send subscribe messages after maxRetry:%d, error:%w", maxRetry, err))
@@ -102,7 +112,7 @@ func (ec exoClient) connectWs(maxRetry int) error {
 		return errors.New("wsEndpoint not set in exoClient")
 	}
 	var err error
-	ec.wsClient.Close()
+	//	ec.wsClient.Close()
 	count := 0
 	for count < maxRetry {
 		if ec.wsClient, _, err = ec.wsDialer.Dial(ec.wsEndpoint, http.Header{}); err == nil {
@@ -120,7 +130,7 @@ func (ec exoClient) connectWs(maxRetry int) error {
 	return fmt.Errorf("failed to dial ws endpoint, endpoint:%s, error:%w", ec.wsEndpoint, err)
 }
 
-func (ec exoClient) closeWs() {
+func (ec *exoClient) StopWsRoutines() {
 	ec.wsLock.Lock()
 	select {
 	case _, ok := <-ec.wsStop:
@@ -193,10 +203,12 @@ func (ec exoClient) sendAllSubscribeMsgs(maxRetry int) error {
 			}
 			if err := ec.wsClient.WriteMessage(websocket.TextMessage, []byte(event)); err == nil {
 				events[event] = false
+				allSet = true
 			} else {
 				ec.logger.Error("failed to send subscribe", "message", event, "error", err)
 			}
 		}
+		time.Sleep(2 * time.Second)
 	}
 	if !allSet {
 		return errors.New(fmt.Sprintf("failed to send all subscribe messages, events:%v", events))
@@ -223,7 +235,7 @@ func (ec exoClient) startPingRoutine() bool {
 				if err := ec.wsClient.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 					logger.Error("failed to write ping message to ws connection, close ws connection, ", "error", err)
 					logger.Info("send signal to stop all running ws routines")
-					ec.closeWs()
+					ec.StopWsRoutines()
 					return
 				}
 			case <-ec.wsStop:
@@ -265,42 +277,39 @@ func (ec exoClient) startReadRoutine() bool {
 					}
 					logger.Info("send signal to stop all running ws routines")
 					// send signal to stop all running ws routines
-					ec.closeWs()
+					ec.StopWsRoutines()
 					return
 				}
 				var response SubscribeResult
 				err = json.Unmarshal(data, &response)
 				if err != nil {
-					ec.logger.Error("failed to pase response from publisher, skip", "error", err)
+					ec.logger.Error("failed to parse response from publisher, skip", "error", err)
 					continue
 				}
-				received := EventRes{}
-
-				switch subEvent(response.Result.Query) {
-				case subNewBlock:
-					received.Height = response.Result.Data.Value.Block.Header.Height
-					events := response.Result.Events
-					if len(events.Fee) > 0 {
-						received.Gas = events.Fee[0]
+				switch eventQuery(response.Result.Query) {
+				case eNewBlock:
+					event, err := response.GetEventNewBlock()
+					if err != nil {
+						ec.logger.Error("failed to get newBlock event from event-response", "response", response, "error", err)
 					}
-					if len(events.ParamsUpdate) > 0 {
-						received.ParamsUpdate = true
+					ec.wsEventsCh <- event
+				case eTxUpdatePrice:
+					event, err := response.GetEventUpdatePrice()
+					if err != nil {
+						ec.logger.Error("failed to get updatePrice event from event-response", "response", response, "error", err)
+						break
 					}
-					// TODO: for oracle v1, this should not happen, since this event only emitted in tx, But if we add more modes to support final price generation in endblock, this would be necessaray.
-					if len(events.PriceUpdate) > 0 && events.PriceUpdate[0] == success {
-						received.FeederIDs = events.FeederIDs[0]
-					}
-					ec.wsEventsCh <- received
-				case subTxUpdatePrice:
-					// as we filtered for price_udpate=success, this means price has been updated this block
-					events := response.Result.Events
-					received.Price = events.FinalPrice
-					received.TxHeight = response.Result.Data.Value.TxResult.Height
-					ec.wsEventsCh <- received
-				case subTxNativeToken:
+					ec.wsEventsCh <- event
+				case eTxNativeToken:
 					// update validator list for staker
-					received.NativeETH = response.Result.Events.NativeTokenChange[0]
+					event, err := response.GetEventUpdateNST()
+					if err != nil {
+						ec.logger.Error("failed to get nativeToken event from event-response", "response", response, "error", err)
+						break
+					}
+					ec.wsEventsCh <- event
 				default:
+					ec.logger.Error("failed to parse unknown event type", "response-data", string(data))
 				}
 			}
 		}

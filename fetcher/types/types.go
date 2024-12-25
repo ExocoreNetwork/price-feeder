@@ -39,7 +39,7 @@ type SourceInf interface {
 	// RestarAllToken()
 }
 
-type SourceInitFunc func(cfgPath string) (SourceInf, error)
+type SourceInitFunc func(cfgPath string, logger feedertypes.LoggerInf) (SourceInf, error)
 
 type SourceFetchFunc func(token string) (*PriceInfo, error)
 
@@ -54,7 +54,7 @@ type NativeRestakingInfo struct {
 
 type PriceInfo struct {
 	Price     string
-	Decimal   int
+	Decimal   int32
 	Timestamp string
 	RoundID   string
 }
@@ -89,10 +89,19 @@ type addTokenRes struct {
 func (p PriceInfo) IsZero() bool {
 	return len(p.Price) == 0
 }
+
+// Equal compare two PriceInfo ignoring the timestamp field
 func (p PriceInfo) Equal(price PriceInfo) bool {
 	if p.Price == price.Price &&
 		p.Decimal == price.Decimal &&
 		p.RoundID == price.RoundID {
+		return true
+	}
+	return false
+}
+func (p PriceInfo) EqualPrice(price PriceInfo) bool {
+	if p.Price == price.Price &&
+		p.Decimal == price.Decimal {
 		return true
 	}
 	return false
@@ -110,6 +119,16 @@ func (p *PriceSync) Get() PriceInfo {
 	price := *p.info
 	p.lock.RUnlock()
 	return price
+}
+
+func (p *PriceSync) Update(price PriceInfo) (updated bool) {
+	p.lock.Lock()
+	if !price.EqualPrice(*p.info) {
+		*p.info = price
+		updated = true
+	}
+	p.lock.Unlock()
+	return
 }
 
 func (p *PriceSync) Set(price PriceInfo) {
@@ -190,16 +209,17 @@ type Source struct {
 // for sources they could utilitize this function to provide that 'SourceInf' by taking care of only the 'fetch' function
 func NewSource(logger feedertypes.LoggerInf, name string, fetch SourceFetchFunc, cfgPath string, reload SourceReloadConfigFunc) *Source {
 	return &Source{
-		logger:           logger,
-		cfgPath:          cfgPath,
-		name:             name,
-		locker:           new(sync.Mutex),
-		stop:             make(chan struct{}),
-		tokens:           make(map[string]*tokenInfo),
-		activeTokenCount: new(atomic.Int32),
-		priceList:        make(map[string]*PriceSync),
-		interval:         defaultInterval,
-		addToken:         make(chan *addTokenReq, defaultPendingTokensLimit),
+		logger:             logger,
+		cfgPath:            cfgPath,
+		name:               name,
+		locker:             new(sync.Mutex),
+		stop:               make(chan struct{}),
+		tokens:             make(map[string]*tokenInfo),
+		activeTokenCount:   new(atomic.Int32),
+		priceList:          make(map[string]*PriceSync),
+		interval:           defaultInterval,
+		addToken:           make(chan *addTokenReq, defaultPendingTokensLimit),
+		tokenNotConfigured: make(chan string, 1),
 		// pendingTokensCount: new(atomic.Int32),
 		// pendingTokensLimit: defaultPendingTokensLimit,
 		fetch:  fetch,
@@ -246,12 +266,12 @@ func (s *Source) Start() map[string]*PriceSync {
 	ret := make(map[string]*PriceSync)
 	for tName, token := range s.tokens {
 		ret[tName] = token.GetPriceSync()
-		s.logger.Info("start fetching prices", "source", s.name, "token", token)
+		s.logger.Info("start fetching prices", "source", s.name, "token", token, "tokenName", token.name)
 		s.startFetchToken(token)
 	}
 	// main routine of source, listen to:
 	// addToken to add a new token for the source and start fetching that token's price
-	// tokenNotConfitured to reload the source's config file for required token
+	// tokenNotConfigured to reload the source's config file for required token
 	// stop closes the source routines and set runnign status to false
 	go func() {
 		for {
@@ -260,7 +280,9 @@ func (s *Source) Start() map[string]*PriceSync {
 				price := NewPriceSync()
 				// check token existence and then add to token list & start if not exists
 				if token, ok := s.tokens[req.tokenName]; !ok {
-					s.tokens[req.tokenName] = NewTokenInfo(req.tokenName, price)
+					token = NewTokenInfo(req.tokenName, price)
+					// s.tokens[req.tokenName] = NewTokenInfo(req.tokenName, price)
+					s.tokens[req.tokenName] = token
 					s.logger.Info("add a new token and start fetching price", "source", s.name, "token", req.tokenName)
 					s.startFetchToken(token)
 				} else {
@@ -302,7 +324,7 @@ func (s *Source) AddTokenAndStart(token string) *addTokenRes {
 			err:   fmt.Errorf("didn't add token due to source:%s not running", s.name),
 		}
 	}
-	// we don't block the process when then channel is not available
+	// we don't block the process when the channel is not available
 	// caller should handle the returned bool value properly
 	addReq, addResCh := newAddTokenReq(token)
 	select {
@@ -329,7 +351,6 @@ func (s *Source) Stop() {
 	default:
 		close(s.stop)
 	}
-	s.running = false
 	s.locker.Unlock()
 }
 
@@ -360,7 +381,10 @@ func (s *Source) startFetchToken(token *tokenInfo) {
 					}
 				} else {
 					// update price
-					token.price.Set(*price)
+					updated := token.price.Update(*price)
+					if updated {
+						s.logger.Info("updated price", "source", s.name, "token", token.name, "price", *price)
+					}
 				}
 			}
 		}
@@ -392,20 +416,28 @@ func (s *Source) Status() map[string]*tokenStatus {
 	return ret
 }
 
+type NSTToken string
+
+// type NSTID string
+//
+// func (n NSTID) String() string {
+// 	return string(n)
+// }
+
 const (
 	defaultPendingTokensLimit = 5
 	defaultInterval           = 30 * time.Second
 	Chainlink                 = "chainlink"
 	BeaconChain               = "beaconchain"
+	Solana                    = "solana"
 
-	NativeTokenETH = "nsteth"
+	NativeTokenETH NSTToken = "nsteth"
+	NativeTokenSOL NSTToken = "nstsol"
 
 	DefaultSlotsPerEpoch = uint64(32)
 )
 
 var (
-	// source -> fetch method
-	//	Fetchers = make(map[string]FetchFunc)
 	// source -> initializers of source
 	SourceInitializers   = make(map[string]SourceInitFunc)
 	ChainToSlotsPerEpoch = map[uint64]uint64{
@@ -414,25 +446,36 @@ var (
 		40217: DefaultSlotsPerEpoch,
 	}
 
-	NativeTokenETHAssetID = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_0x65"
-	//	NativeRestakings      = map[string][]string{
-	//		"eth": {BeaconChain, NativeTokenETH},
-	//	}
-	//	NativeRestakings = map[string]NativeRestakingInfo{
-	//		"eth": NativeRestakingInfo{
-	//			Chain:   BeaconChain,
-	//			TokenID: NativeTokenETH,
-	//		},
-	//	}
-
-	AssetIDMap = map[string]string{
-		NativeTokenETH: NativeTokenETHAssetID,
+	NSTTokens = map[NSTToken]struct{}{
+		NativeTokenETH: struct{}{},
+		NativeTokenSOL: struct{}{},
+	}
+	NSTAssetIDMap = make(map[NSTToken]string)
+	NSTSourceMap  = map[NSTToken]string{
+		NativeTokenETH: BeaconChain,
+		NativeTokenSOL: Solana,
 	}
 
 	Logger feedertypes.LoggerInf
 )
 
-func UpdateNativeAssetID(nstID string) {
-	NativeTokenETHAssetID = nstID
-	AssetIDMap[NativeTokenETH] = NativeTokenETHAssetID
+func SetNativeAssetID(nstToken NSTToken, assetID string) {
+	NSTAssetIDMap[nstToken] = assetID
+}
+
+// GetNSTSource returns source name as string
+func GetNSTSource(nstToken NSTToken) string {
+	return NSTSourceMap[nstToken]
+}
+
+// GetNSTAssetID returns nst assetID as string
+func GetNSTAssetID(nstToken NSTToken) string {
+	return NSTAssetIDMap[nstToken]
+}
+
+func IsNSTToken(tokenName string) bool {
+	if _, ok := NSTTokens[NSTToken(tokenName)]; ok {
+		return true
+	}
+	return false
 }

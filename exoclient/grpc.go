@@ -13,8 +13,8 @@ import (
 )
 
 // CreateGrpcConn creates an grpc connection to the target
-func createGrpcConn(target string, encCfg params.EncodingConfig) (conn *grpc.ClientConn, cancelFunc func(), err error) {
-	ctx, cancel := context.WithCancel(context.Background())
+func createGrpcConn(target string, encCfg params.EncodingConfig) (conn *grpc.ClientConn, err error) {
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
 	grpcConn, err := grpc.DialContext(
 		ctx,
@@ -23,14 +23,15 @@ func createGrpcConn(target string, encCfg params.EncodingConfig) (conn *grpc.Cli
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(encCfg.InterfaceRegistry).GRPCCodec())),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                30 * time.Second,
+			Time:                150 * time.Second,
 			Timeout:             5 * time.Second,
 			PermitWithoutStream: true,
 		}),
+		grpc.WithBlock(),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create grpc connection, error:%w", err)
+		return nil, fmt.Errorf("failed to create grpc connection, error:%w", err)
 	}
 
-	return grpcConn, cancel, nil
+	return grpcConn, nil
 }

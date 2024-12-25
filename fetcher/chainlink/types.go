@@ -93,9 +93,11 @@ func init() {
 	types.SourceInitializers[types.Chainlink] = initChainlink
 }
 
-func initChainlink(cfgPath string) (types.SourceInf, error) {
-	if logger = feedertypes.GetLogger("fetcher_chainlink"); logger == nil {
-		return nil, feedertypes.ErrInitFail.Wrap("logger is not initialized")
+func initChainlink(cfgPath string, l feedertypes.LoggerInf) (types.SourceInf, error) {
+	if logger = l; logger == nil {
+		if logger = feedertypes.GetLogger("fetcher_chainlink"); logger == nil {
+			return nil, feedertypes.ErrInitFail.Wrap("logger is not initialized")
+		}
 	}
 	cfg, err := parseConfig(cfgPath)
 	if err != nil {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -16,7 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func (s *source) fetch(token string) (*types.PriceInfo, error) {
+func (s *source) fetch(token string) (*fetchertypes.PriceInfo, error) {
 	chainlinkPriceFeedProxy, ok := s.chainlinkProxy.get(token)
 	if !ok {
 		return nil, feedertypes.ErrSrouceTokenNotConfigured.Wrap(fmt.Sprintf("failed to get chainlinkProxy for token:%s for not set", token))
@@ -32,9 +32,9 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 		return nil, fmt.Errorf("failed to get decimals, error:%w", err)
 	}
 
-	return &types.PriceInfo{
+	return &fetchertypes.PriceInfo{
 		Price:     roundData.Answer.String(),
-		Decimal:   int(decimals),
+		Decimal:   int32(decimals),
 		Timestamp: time.Now().String(),
 		RoundID:   roundData.RoundId.String(),
 	}, nil
@@ -79,7 +79,9 @@ func (s *source) reload(cfgPath string, token string) error {
 	for tName, tContract := range cfg.Tokens {
 		tName = strings.ToLower(tName)
 		if strings.EqualFold(tName, token) {
-			s.chainlinkProxy.addToken(map[string]string{tName: tContract})
+			if err := s.chainlinkProxy.addToken(map[string]string{tName: tContract}); err != nil {
+				s.logger.Error("failed to add proxy when do reload", "source", s.GetName(), "token", tName, "error", err)
+			}
 			return nil
 		}
 	}

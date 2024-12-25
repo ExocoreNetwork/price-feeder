@@ -4,14 +4,18 @@ import (
 	cryptoed25519 "crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
+	"strconv"
+	"strings"
 
 	"github.com/ExocoreNetwork/exocore/app"
 	cmdcfg "github.com/ExocoreNetwork/exocore/cmd/config"
 	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
@@ -21,18 +25,169 @@ import (
 	"github.com/evmos/evmos/v16/encoding"
 )
 
-type exoClientInf interface {
+type ExoClientInf interface {
 	// Query
-	GetParams() (oracletypes.Params, error)
+	GetParams() (*oracletypes.Params, error)
 	GetLatestPrice(tokenID uint64) (oracletypes.PriceTimeRound, error)
 	GetStakerInfos(assetID string) ([]*oracleTypes.StakerInfo, error)
 	GetStakerInfo(assetID, stakerAddr string) ([]*oracleTypes.StakerInfo, error)
 
 	// Tx
-	SendTx(feederID uint64, baseBlock uint64, price, roundID string, decimal int, nonce int32) (*sdktx.BroadcastTxResponse, error)
+	SendTx(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*sdktx.BroadcastTxResponse, error)
 
 	// Ws subscriber
 	Subscribe()
+}
+
+type EventInf interface {
+	Type() EventType
+}
+
+type EventNewBlock struct {
+	height       int64
+	gas          string
+	paramsUpdate bool
+	feederIDs    map[int64]struct{}
+}
+
+func (s *SubscribeResult) GetEventNewBlock() (*EventNewBlock, error) {
+	height, ok := s.BlockHeight()
+	if !ok {
+		return nil, errors.New("failed to get height from event_newBlock response")
+	}
+	fee, ok := s.Fee()
+	if !ok {
+		return nil, errors.New("failed to get gas from event_newBlock response")
+	}
+	feederIDs, ok := s.FeederIDs()
+	if !ok {
+		return nil, errors.New("failed to get feederIDs from event_newBlock response")
+	}
+
+	return &EventNewBlock{
+		height:       height,
+		gas:          fee,
+		paramsUpdate: s.ParamsUpdate(),
+		feederIDs:    feederIDs,
+	}, nil
+}
+func (e *EventNewBlock) Height() int64 {
+	return e.height
+}
+func (e *EventNewBlock) Gas() string {
+	return e.gas
+}
+func (e *EventNewBlock) ParamsUpdate() bool {
+	return e.paramsUpdate
+}
+func (e *EventNewBlock) FeederIDs() map[int64]struct{} {
+	return e.feederIDs
+}
+func (e *EventNewBlock) Type() EventType {
+	return ENewBlock
+}
+
+type FinalPrice struct {
+	tokenID int64
+	roundID string
+	price   string
+	decimal int32
+}
+
+func (f *FinalPrice) TokenID() int64 {
+	return f.tokenID
+}
+func (f *FinalPrice) RoundID() string {
+	return f.roundID
+}
+func (f *FinalPrice) Price() string {
+	return f.price
+}
+func (f *FinalPrice) Decimal() int32 {
+	return f.decimal
+}
+
+type EventUpdatePrice struct {
+	prices   []*FinalPrice
+	txHeight int64
+}
+
+func (s *SubscribeResult) GetEventUpdatePrice() (*EventUpdatePrice, error) {
+	prices, ok := s.FinalPrice()
+	if !ok {
+		return nil, errors.New("failed to get finalPrice from event_txUpdatePrice response")
+	}
+	txHeight, ok := s.TxHeight()
+	if !ok {
+		return nil, errors.New("failed to get txHeight from event_txUpdatePrice response")
+	}
+	return &EventUpdatePrice{
+		prices:   prices,
+		txHeight: txHeight,
+	}, nil
+}
+func (e *EventUpdatePrice) Prices() []*FinalPrice {
+	return e.prices
+}
+func (e *EventUpdatePrice) TxHeight() int64 {
+	return e.txHeight
+}
+func (e *EventUpdatePrice) Type() EventType {
+	return EUpdatePrice
+}
+
+// EventUpdateNST tells the detail about the beaconchain-validator change for a staker
+type EventUpdateNST struct {
+	deposit        bool
+	stakerID       int64
+	validatorIndex string
+	index          int64
+}
+
+func (s *SubscribeResult) GetEventUpdateNST() (*EventUpdateNST, error) {
+	nstChange, ok := s.NSTChange()
+	if !ok {
+		return nil, errors.New("failed to get NativeTokenChange from event_txUpdateNST response")
+	}
+	parsed := strings.Split(nstChange, "_")
+	if len(parsed) != 4 {
+		return nil, fmt.Errorf("failed to parse nstChange due to length is not expected 4 from event_txUPdatedNST response", "nstChange_str", nstChange)
+	}
+	deposit := parsed[0] == "deposit"
+	stakerID, err := strconv.ParseInt(parsed[1], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse stakerID in nstChange from evetn_txUpdateNST response, error:%w", err)
+	}
+	//	validatorIndex, err := strconv.ParseInt(strings.TrimPrefix(parsed[2], "0x"), 16, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse beaconchain_valdiatorIndex in nstChange from event_txUpdateNST response, error:%w", err)
+	}
+	index, err := strconv.ParseInt(parsed[3], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse beaconchain_sync_index in nstChange from event_txUpdateNST response, error:%w", err)
+	}
+	return &EventUpdateNST{
+		deposit:  deposit,
+		stakerID: stakerID,
+		// validatorIndex: validatorIndex,
+		validatorIndex: parsed[2],
+		index:          index,
+	}, nil
+}
+func (e *EventUpdateNST) Deposit() bool {
+	return e.deposit
+}
+func (e *EventUpdateNST) StakerID() int64 {
+	return e.stakerID
+}
+func (e *EventUpdateNST) ValidatorIndex() string {
+	return e.validatorIndex
+}
+func (e *EventUpdateNST) Index() int64 {
+	return e.index
+}
+func (e *EventUpdateNST) Type() EventType {
+	return EUpdateNST
 }
 
 type EventType int
@@ -45,6 +200,7 @@ type EventRes struct {
 	FeederIDs    string
 	TxHeight     string
 	NativeETH    string
+	eventMessage interface{}
 	Type         EventType
 }
 
@@ -76,6 +232,105 @@ type SubscribeResult struct {
 	} `json:"result"`
 }
 
+func (s *SubscribeResult) BlockHeight() (int64, bool) {
+	if h := s.Result.Data.Value.Block.Header.Height; len(h) > 0 {
+		height, err := strconv.ParseInt(h, 10, 64)
+		if err != nil {
+			logger.Error("failed to parse int64 from height in SubscribeResult", "error", err, "height_str", h)
+		}
+		return height, true
+	}
+	return 0, false
+}
+
+func (s *SubscribeResult) TxHeight() (int64, bool) {
+	if h := s.Result.Data.Value.TxResult.Height; len(h) > 0 {
+		height, err := strconv.ParseInt(h, 10, 64)
+		if err != nil {
+			logger.Error("failed to parse int64 from txheight in SubscribeResult", "error", err, "height_str", h)
+		}
+		return height, true
+	}
+	return 0, false
+}
+
+// FeederIDs will return (nil, true) when there's no feederIDs
+func (s *SubscribeResult) FeederIDs() (feederIDs map[int64]struct{}, valid bool) {
+	events := s.Result.Events
+	if len(events.PriceUpdate) > 0 && events.PriceUpdate[0] == success {
+		if feederIDsStr := strings.Split(events.FeederIDs[0], "_"); len(feederIDsStr) > 0 {
+			feederIDs = make(map[int64]struct{})
+			for _, feederIDStr := range feederIDsStr {
+				id, err := strconv.ParseInt(feederIDStr, 10, 64)
+				if err != nil {
+					logger.Error("failed to parse int64 from feederIDs in subscribeResult", "feederIDs", feederIDs)
+					feederIDs = nil
+					return
+				}
+				feederIDs[id] = struct{}{}
+			}
+			valid = true
+		}
+
+	}
+	// we don't take it as a 'false' case when there's no feederIDs
+	valid = true
+	return
+}
+
+func (s *SubscribeResult) FinalPrice() (prices []*FinalPrice, valid bool) {
+	if fps := s.Result.Events.FinalPrice; len(fps) > 0 {
+		prices = make([]*FinalPrice, 0, len(fps))
+		for _, price := range fps {
+			parsed := strings.Split(price, "_")
+			if len(parsed) != 4 {
+				logger.Error("failed to parse finalprice from subscribeResult", "finalPrice", price)
+				prices = nil
+				return
+			}
+			tokenID, err := strconv.ParseInt(parsed[0], 10, 64)
+			if err != nil {
+				logger.Error("failed to parse finalprice.tokenID from SubscribeResult", "parsed.tokenID", parsed[0])
+				prices = nil
+				return
+			}
+			decimal, err := strconv.ParseInt(parsed[3], 10, 32)
+			if err != nil {
+				logger.Error("failed to parse finalprice.decimal from SubscribeResult", "parsed.decimal", parsed[3])
+				prices = nil
+				return
+			}
+			prices = append(prices, &FinalPrice{
+				tokenID: tokenID,
+				roundID: parsed[1],
+				price:   parsed[2],
+				// conversion is safe
+				decimal: int32(decimal),
+			})
+		}
+		valid = true
+	}
+	return
+}
+
+func (s *SubscribeResult) NSTChange() (string, bool) {
+	if len(s.Result.Events.NativeTokenChange[0]) == 0 {
+		return "", false
+	}
+	return s.Result.Events.NativeTokenChange[0], true
+}
+
+func (s *SubscribeResult) ParamsUpdate() bool {
+	return len(s.Result.Events.ParamsUpdate) > 0
+}
+
+func (s *SubscribeResult) Fee() (string, bool) {
+	if len(s.Result.Events.Fee) == 0 {
+		return "", false
+	}
+	return s.Result.Events.Fee[0], true
+}
+
 const (
 	// current version of 'Oracle' only support id=1(chainlink) as valid source
 	Chainlink uint64 = 1
@@ -84,9 +339,9 @@ const (
 )
 
 const (
-	NewBlock EventType = iota + 1
-	UpdatePrice
-	UpdateNST
+	ENewBlock EventType = iota + 1
+	EUpdatePrice
+	EUpdateNST
 )
 
 var (
@@ -159,6 +414,9 @@ func Init(conf feedertypes.Config, mnemonic, privFile string, standalone bool) e
 
 	var err error
 	if defaultExoClient, err = NewExoClient(logger, confExocore.Rpc, confExocore.Ws, privKey, encCfg, confExocore.ChainID); err != nil {
+		if errors.Is(err, feedertypes.ErrInitConnectionFail) {
+			return err
+		}
 		return feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to NewExoClient, privKey:%v, chainID:%s, error:%v", privKey, confExocore.ChainID, err))
 	}
 

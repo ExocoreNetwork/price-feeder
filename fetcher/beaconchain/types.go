@@ -2,9 +2,9 @@ package beaconchain
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,20 +12,14 @@ import (
 	"strconv"
 	"strings"
 
+	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/cometbft/cometbft/libs/sync"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"gopkg.in/yaml.v2"
 )
-
-//	type stakerList struct {
-//		StakerAddrs []string
-//	}
-//
-//	type validatorList struct {
-//		index      uint64
-//		validators []string
-//	}
 
 type source struct {
 	logger feedertypes.LoggerInf
@@ -42,6 +36,116 @@ type ResultConfig struct {
 	} `json:"data"`
 }
 
+type stakerVList struct {
+	locker      *sync.RWMutex
+	sValidators map[int]*validatorList
+}
+
+func newStakerVList() *stakerVList {
+	return &stakerVList{
+		locker:      new(sync.RWMutex),
+		sValidators: make(map[int]*validatorList),
+	}
+}
+
+func (s *stakerVList) length() int {
+	if s == nil {
+		return 0
+	}
+	s.locker.RLock()
+	l := len(s.sValidators)
+	s.locker.RUnlock()
+	return l
+}
+
+func (s *stakerVList) getStakerValidators() map[int]*validatorList {
+	s.locker.RLock()
+	defer s.locker.RUnlock()
+	ret := make(map[int]*validatorList)
+	for stakerIdx, vList := range s.sValidators {
+		validators := make([]string, len(vList.validators))
+		copy(validators, vList.validators)
+		ret[stakerIdx] = &validatorList{
+			index:      vList.index,
+			validators: validators,
+		}
+	}
+	return ret
+}
+
+func (s *stakerVList) addVIdx(sIdx int, vIdx string, index uint64) bool {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	if vList, ok := s.sValidators[sIdx]; ok {
+		if vList.index+1 != index {
+			return false
+		}
+		vList.index++
+		vList.validators = append(vList.validators, vIdx)
+	} else {
+		if index != 0 {
+			return false
+		}
+		s.sValidators[sIdx] = &validatorList{
+			index:      0,
+			validators: []string{vIdx},
+		}
+	}
+	return true
+}
+func (s *stakerVList) removeVIdx(sIdx int, vIdx string, index uint64) bool {
+	s.locker.RLock()
+	defer s.locker.RUnlock()
+	if vList, ok := s.sValidators[sIdx]; ok {
+		if vList.index+1 != index {
+			return false
+		}
+		vList.index++
+		for idx, v := range vList.validators {
+			if v == vIdx {
+				if len(vList.validators) == 1 {
+					delete(s.sValidators, sIdx)
+					return true
+				}
+				vList.validators = append(vList.validators[:idx], vList.validators[idx+1:]...)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *stakerVList) reset(stakerInfos []*oracletypes.StakerInfo, all bool) error {
+	s.locker.Lock()
+	if all {
+		s.sValidators = make(map[int]*validatorList)
+	}
+	for _, stakerInfo := range stakerInfos {
+		validators := make([]string, 0, len(stakerInfo.ValidatorPubkeyList))
+		for _, validatorIndexHex := range stakerInfo.ValidatorPubkeyList {
+			validatorIdx, err := convertHexToIntStr(validatorIndexHex)
+			if err != nil {
+				logger.Error("failed to convert validatorIndex from hex string to int", "validator-index-hex", validatorIndexHex)
+				return fmt.Errorf(fmt.Sprintf("failed to convert validatorIndex from hex string to int, validator-index-hex:%s", validatorIndexHex))
+			}
+			validators = append(validators, validatorIdx)
+		}
+
+		index := uint64(0)
+		// TODO: this may not necessary, stakerInfo should have at least one entry in balanceList
+		if l := len(stakerInfo.BalanceList); l > 0 {
+			index = stakerInfo.BalanceList[l-1].Index
+		}
+		s.sValidators[int(stakerInfo.StakerIndex)] = &validatorList{
+			index:      index,
+			validators: validators,
+		}
+
+	}
+	s.locker.Unlock()
+	return nil
+}
+
 const (
 	envConf               = "oracle_env_beaconchain.yaml"
 	urlQuerySlotsPerEpoch = "eth/v1/config/spec"
@@ -50,23 +154,19 @@ const (
 
 var (
 	logger        feedertypes.LoggerInf
-	lock          sync.RWMutex
 	defaultSource *source
-
-	// errors
-	errTokenNotSupported = errors.New("token not supported")
 )
 
 func init() {
 	types.SourceInitializers[types.BeaconChain] = initBeaconchain
 }
 
-func initBeaconchain(cfgPath string) (types.SourceInf, error) {
-	// init logger, panic immediately if logger has not been set properly
-	if logger = feedertypes.GetLogger("fetcher_beaconchain"); logger == nil {
-		panic("logger is not initialized")
+func initBeaconchain(cfgPath string, l feedertypes.LoggerInf) (types.SourceInf, error) {
+	if logger = l; logger == nil {
+		if logger = feedertypes.GetLogger("fetcher_beaconchain"); logger == nil {
+			return nil, feedertypes.ErrInitFail.Wrap("logger is not initialized")
+		}
 	}
-
 	// init from config file
 	cfg, err := parseConfig(cfgPath)
 	if err != nil {
@@ -121,8 +221,7 @@ func initBeaconchain(cfgPath string) (types.SourceInf, error) {
 	// initialize native-restaking stakers' beaconchain-validator list
 
 	// update nst assetID to be consistent with exocored. for beaconchain it's about different lzID
-	types.UpdateNativeAssetID(cfg.NSTID)
-	//	types.Fetchers[types.BeaconChain] = Fetch
+	types.SetNativeAssetID(fetchertypes.NativeTokenETH, cfg.NSTID)
 
 	return defaultSource, nil
 }
@@ -137,4 +236,13 @@ func parseConfig(confPath string) (config, error) {
 		return config{}, err
 	}
 	return cfg, nil
+}
+
+func convertHexToIntStr(hexStr string) (string, error) {
+	vBytes, err := hexutil.Decode(hexStr)
+	if err != nil {
+		return "", err
+	}
+	return new(big.Int).SetBytes(vBytes).String(), nil
+
 }

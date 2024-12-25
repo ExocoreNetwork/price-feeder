@@ -8,12 +8,12 @@ import (
 )
 
 // GetParams queries oracle params
-func (ec exoClient) GetParams() (oracleTypes.Params, error) {
+func (ec exoClient) GetParams() (*oracleTypes.Params, error) {
 	paramsRes, err := ec.oracleClient.Params(context.Background(), &oracleTypes.QueryParamsRequest{})
 	if err != nil {
-		return oracleTypes.Params{}, fmt.Errorf("failed to query oracle params from oracleClient, error:%w", err)
+		return &oracleTypes.Params{}, fmt.Errorf("failed to query oracle params from oracleClient, error:%w", err)
 	}
-	return paramsRes.Params, nil
+	return &paramsRes.Params, nil
 
 }
 

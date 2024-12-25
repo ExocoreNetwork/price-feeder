@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
 
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
@@ -16,20 +17,21 @@ import (
 )
 
 // SendTx signs a create-price transaction and send it to exocored
-func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price, roundID string, decimal int, nonce int32) (*sdktx.BroadcastTxResponse, error) {
+// func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price, roundID string, decimal int, nonce int32) (*sdktx.BroadcastTxResponse, error) {
+func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*sdktx.BroadcastTxResponse, error) {
 	// build create-price message
-	msg := oracleTypes.NewMsgCreatePrice(
+	msg := oracletypes.NewMsgCreatePrice(
 		sdk.AccAddress(ec.pubKey.Address()).String(),
 		feederID,
-		[]*oracleTypes.PriceSource{
+		[]*oracletypes.PriceSource{
 			{
 				SourceID: Chainlink,
-				Prices: []*oracleTypes.PriceTimeDetID{
+				Prices: []*oracletypes.PriceTimeDetID{
 					{
-						Price:     price,
-						Decimal:   int32(decimal),
+						Price:     price.Price,
+						Decimal:   price.Decimal,
 						Timestamp: time.Now().UTC().Format(layout),
-						DetID:     roundID,
+						DetID:     price.RoundID,
 					},
 				},
 				Desc: "",

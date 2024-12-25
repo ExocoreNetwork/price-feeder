@@ -10,6 +10,21 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// TODO: define the interface of fetchertypes.PriceInfo, for fetcher,exocclient to referenced
+// PriceInfoInf defines the core structure which has the value/data that is fetched from out-exocore-chain source
+// and submit to exocore-chain
+// type PriceInfoInf interface {
+// 	SetPrice()
+// 	SetDecimal()
+// 	SetRoundID()
+// 	SetTimeStamp()
+//
+// 	GetPrice()
+// 	GetDecimal()
+// 	GetRoundID()
+// 	GetTimeStamp()
+// }
+
 type PrivValidatorKey struct {
 	Address string `json:"address"`
 	PrivKey struct {
@@ -33,10 +48,6 @@ type Config struct {
 		AppName string `mapstructure:"appname"`
 		Rpc     string `mapstructure:"rpc"`
 		Ws      string `mapstructure:"ws"`
-		//		Ws      struct {
-		//			Addr     string `mapstructure:"addr"`
-		//			Endpoint string `mapstructure:"endpoint"`
-		//		} `mapstructure:"ws"`
 	} `mapstructure:"exocore"`
 }
 
@@ -69,6 +80,7 @@ func NewLogger(level zapcore.Level) *LoggerWrapper {
 	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
 	config.Encoding = "console"
 	config.Level = zap.NewAtomicLevelAt(level)
+	config.EncoderConfig.StacktraceKey = ""
 	logger, _ := config.Build()
 	return &LoggerWrapper{
 		logger.Sugar(),
@@ -134,36 +146,15 @@ func (e *Err) Unwrap() error {
 	return e.parent
 }
 
-// type Config struct {
-// 	Tokens []TokenSources `mapstructure:"tokens"`
-// 	//	Tokens []struct {
-// 	//		Token   string `mapstructure:"token"`
-// 	//		Sources string `mapstructure:"sources"`
-// 	//	} `mapstructure:"tokens"`
-// 	// Sources []string `mapstructure:"sources"`
-// 	// Tokens  []string `mapstructure:"tokens"`
-// 	Sender struct {
-// 		Mnemonic string `mapstructure:"mnemonic"`
-// 		Path     string `mapstructure:"path"`
-// 	} `mapstructure:"sender"`
-// 	Exocore struct {
-// 		ChainID string `mapstructure:"chainid"`
-// 		AppName string `mapstructure:"appname"`
-// 		Rpc     string `mapstructure:"rpc"`
-// 		Ws      struct {
-// 			Addr     string `mapstructure:"addr"`
-// 			Endpoint string `mapstructure:"endpoint"`
-// 		} `mapstructure:"ws"`
-// 	} `mapstructure:"exocore"`
-// }
-
 var (
 	ConfigFile        string
 	SourcesConfigPath string
 	v                 *viper.Viper
 
-	ErrInitFail                 = NewErr("Failed to initialization")
+	ErrInitFail                 = NewErr("failed to initialization")
+	ErrInitConnectionFail       = NewErr("failed to establish a connection")
 	ErrSrouceTokenNotConfigured = NewErr("token not configured")
+	ErrTokenNotSupported        = NewErr("token not supported")
 )
 
 // InitConfig will only read path cfgFile once, and for reload after InitConfig, should use ReloadConfig
