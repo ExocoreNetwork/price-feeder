@@ -181,7 +181,11 @@ func (f *feeder) start() {
 							f.logger.Info("got nil latest price, skip submitting price", "roundID", roundID, "delta", delta)
 							continue
 						}
-						if price.EqualPrice(f.lastPrice.price) {
+						if len(price.Price) >= 32 && price.EqualToBase64Price(f.lastPrice.price) {
+							f.logger.Info("didn't submit price due to price not changed", "roundID", roundID, "delta", delta, "price", price)
+							f.logger.Debug("got latsetprice equal to local cache", "feeder", f.Info())
+							continue
+						} else if price.EqualPrice(f.lastPrice.price) {
 							f.logger.Info("didn't submit price due to price not changed", "roundID", roundID, "delta", delta, "price", price)
 							f.logger.Debug("got latsetprice equal to local cache", "feeder", f.Info())
 							continue

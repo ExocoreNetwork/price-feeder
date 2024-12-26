@@ -283,10 +283,18 @@ func (s *SubscribeResult) FinalPrice() (prices []*FinalPrice, valid bool) {
 		prices = make([]*FinalPrice, 0, len(fps))
 		for _, price := range fps {
 			parsed := strings.Split(price, "_")
-			if len(parsed) != 4 {
-				logger.Error("failed to parse finalprice from subscribeResult", "finalPrice", price)
-				prices = nil
-				return
+			if l := len(parsed); l > 4 {
+				// nsteth
+				parsed[2] = strings.Join(parsed[2:l-1], "_")
+				parsed[3] = parsed[l-1]
+				parsed = parsed[:4]
+			}
+			if len(parsed[2]) == 32 {
+				// make sure this base64 string is valid
+				if _, err := base64.StdEncoding.DecodeString(parsed[2]); err != nil {
+					logger.Error("failed to parse base64 encoded string when parse finalprice.price from SbuscribeResult", "parsed.price", parsed[2])
+					return
+				}
 			}
 			tokenID, err := strconv.ParseInt(parsed[0], 10, 64)
 			if err != nil {

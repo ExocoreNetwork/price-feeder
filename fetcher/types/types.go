@@ -1,6 +1,8 @@
 package types
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -90,16 +92,22 @@ func (p PriceInfo) IsZero() bool {
 	return len(p.Price) == 0
 }
 
-// Equal compare two PriceInfo ignoring the timestamp field
-func (p PriceInfo) Equal(price PriceInfo) bool {
+// Equal compare two PriceInfo ignoring the timestamp, roundID fields
+func (p PriceInfo) EqualPrice(price PriceInfo) bool {
 	if p.Price == price.Price &&
-		p.Decimal == price.Decimal &&
-		p.RoundID == price.RoundID {
+		p.Decimal == price.Decimal {
 		return true
 	}
 	return false
 }
-func (p PriceInfo) EqualPrice(price PriceInfo) bool {
+func (p PriceInfo) EqualToBase64Price(price PriceInfo) bool {
+	if len(p.Price) < 32 {
+		return false
+	}
+	h := sha256.New()
+	h.Write([]byte(p.Price))
+	p.Price = base64.StdEncoding.EncodeToString(h.Sum(nil))
+
 	if p.Price == price.Price &&
 		p.Decimal == price.Decimal {
 		return true
@@ -439,6 +447,7 @@ const (
 )
 
 var (
+	NSTETHZeroChanges = make([]byte, 32)
 	// source -> initializers of source
 	SourceInitializers   = make(map[string]SourceInitFunc)
 	ChainToSlotsPerEpoch = map[uint64]uint64{

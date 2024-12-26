@@ -75,7 +75,8 @@ var (
 	finalizedEpoch uint64
 
 	// latest stakerBalanceChanges, initialized as 0 change (256-0 of 1st parts means that all stakers have 32 efb)
-	latestChangesBytes = make([]byte, 32)
+	//	latestChangesBytes = make([]byte, 32)
+	latestChangesBytes = types.NSTETHZeroChanges
 
 	urlEndpoint   *url.URL
 	slotsPerEpoch uint64
