@@ -66,7 +66,7 @@ func isContractAddress(addr string, client *ethclient.Client) bool {
 func (s *source) reload(cfgPath string, token string) error {
 	cfg, err := parseConfig(cfgPath)
 	if err != nil {
-		return errors.New("failed to parse config file")
+		return fmt.Errorf("failed to parse config file, error:%w", err)
 	}
 	// add new network from config file
 	for network, url := range cfg.URLs {
