@@ -151,15 +151,12 @@ func (s *SubscribeResult) GetEventUpdateNST() (*EventUpdateNST, error) {
 	}
 	parsed := strings.Split(nstChange, "_")
 	if len(parsed) != 4 {
-		return nil, fmt.Errorf("failed to parse nstChange due to length is not expected 4 from event_txUPdatedNST response", "nstChange_str", nstChange)
+		return nil, fmt.Errorf("failed to parse nstChange: expected 4 parts but got %d, nstChange: %s", len(parsed), nstChange)
 	}
 	deposit := parsed[0] == "deposit"
 	stakerID, err := strconv.ParseInt(parsed[1], 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse stakerID in nstChange from evetn_txUpdateNST response, error:%w", err)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse beaconchain_valdiatorIndex in nstChange from event_txUpdateNST response, error:%w", err)
 	}
 	index, err := strconv.ParseInt(parsed[3], 10, 64)
 	if err != nil {

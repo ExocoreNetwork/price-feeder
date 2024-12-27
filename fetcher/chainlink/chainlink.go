@@ -19,7 +19,7 @@ import (
 func (s *source) fetch(token string) (*fetchertypes.PriceInfo, error) {
 	chainlinkPriceFeedProxy, ok := s.chainlinkProxy.get(token)
 	if !ok {
-		return nil, feedertypes.ErrSourceTokenNotConfigured.Wrap(fmt.Sprintf("failed to get chainlinkProxy for token:%s for not set", token))
+		return nil, feedertypes.ErrSourceTokenNotConfigured.Wrap(fmt.Sprintf("chainlinkProxy not configured for token: %s", token))
 	}
 
 	roundData, err := chainlinkPriceFeedProxy.LatestRoundData(&bind.CallOpts{})
@@ -85,5 +85,5 @@ func (s *source) reload(cfgPath string, token string) error {
 			return nil
 		}
 	}
-	return errors.New("token not found in reloaded config filed")
+	return errors.New("token not found in reloaded config file")
 }

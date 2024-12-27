@@ -186,12 +186,10 @@ func initComponents(logger types.LoggerInf, conf types.Config, standalone bool) 
 		}
 
 		ec, _ := exoclient.GetClient()
-		_, err = ec.GetParams()
-		for err != nil {
-			// retry forever until be interrupted manually
-			logger.Info("failed to get oracle params on start, retrying...", "error", err)
-			time.Sleep(2 * time.Second)
-			_, err = ec.GetParams()
+
+		_, err = getOracleParamsWithMaxRetry(DefaultRetryConfig.MaxAttempts, ec, logger)
+		if err != nil {
+			return fmt.Errorf("failed to get oracle params on start, error:%w", err)
 		}
 
 		// init native stakerlist for nstETH(beaconchain)
