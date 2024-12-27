@@ -1,7 +1,7 @@
 feed.sh
 config-*.yaml
 configs/
-node*.log
+*.log
 pids
 build/
 fetcher/beaconchain/oracle_env_beaconchain.yaml

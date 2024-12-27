@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"net/url"
 	"sort"
@@ -15,7 +14,7 @@ import (
 
 	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	"github.com/ethereum/go-ethereum/common/hexutil"
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/imroc/biu"
 )
 
@@ -69,117 +68,46 @@ var (
 	//	}
 	//
 	//	stakerValidators = map[int]*validatorList{2: {0, validatorsTmp}}
-	stakerValidators = make(map[int]*validatorList)
+	// stakerValidators  = make(map[int]*validatorList)
+	defaultStakerValidators = newStakerVList()
 
 	// latest finalized epoch we've got balances summarized for stakers
 	finalizedEpoch uint64
 
 	// latest stakerBalanceChanges, initialized as 0 change (256-0 of 1st parts means that all stakers have 32 efb)
-	latestChangesBytes = make([]byte, 32)
+	//	latestChangesBytes = make([]byte, 32)
+	latestChangesBytes = types.NSTETHZeroChanges
 
 	urlEndpoint   *url.URL
 	slotsPerEpoch uint64
 )
 
-func ResetStakerValidators(stakerInfos []*oracletypes.StakerInfo) {
-	lock.Lock()
-	for _, sInfo := range stakerInfos {
-		index := uint64(0)
-		if l := len(sInfo.BalanceList); l > 0 {
-			index = sInfo.BalanceList[l-1].Index
-		}
-		// convert bytes into number of beaconchain validator index
-		validators := make([]string, 0, len(sInfo.ValidatorPubkeyList))
-		for _, validatorPubkey := range sInfo.ValidatorPubkeyList {
-			validatorPubkeyBytes, _ := hexutil.Decode(validatorPubkey)
-			validatorPubkeyNum := new(big.Int).SetBytes(validatorPubkeyBytes).String()
-			validators = append(validators, validatorPubkeyNum)
-		}
-		stakerValidators[int(sInfo.StakerIndex)] = &validatorList{
-			index:      index,
-			validators: validators,
-		}
-	}
-	lock.Unlock()
+func ResetStakerValidators(stakerInfos []*oracletypes.StakerInfo, all bool) error {
+	return defaultStakerValidators.reset(stakerInfos, all)
 }
-
-// UpdateStakerValidators update staker's validators for deposit/withdraw events triggered by exocore
-func UpdateStakerValidators(stakerIdx int, validatorPubkey string, deposit bool, index uint64) bool {
-	lock.Lock()
-	defer lock.Unlock()
-	validatorPubkeyBytes, _ := hexutil.Decode(validatorPubkey)
-	validatorPubkey = new(big.Int).SetBytes(validatorPubkeyBytes).String()
-	// add a new valdiator for the staker
+func UpdateStakerValidators(stakerIdx int, validatorIndexHex string, index uint64, deposit bool) bool {
 	if deposit {
-		if vList, ok := stakerValidators[stakerIdx]; ok {
-			if vList.index+1 != index {
-				return false
-			}
-			vList.index++
-			vList.validators = append(vList.validators, validatorPubkey)
-		} else {
-			stakerValidators[stakerIdx] = &validatorList{
-				index:      index,
-				validators: []string{validatorPubkey},
-			}
-		}
-	} else {
-		// remove the existing validatorIndex for the corresponding staker
-		if vList, ok := stakerValidators[stakerIdx]; ok {
-			if vList.index+1 != index {
-				return false
-			}
-			vList.index++
-			for idx, v := range vList.validators {
-				if v == validatorPubkey {
-					if len(vList.validators) == 1 {
-						delete(stakerValidators, stakerIdx)
-						break
-					}
-					vList.validators = append(vList.validators[:idx], vList.validators[idx+1:]...)
-					break
-				}
-			}
-		}
+		return defaultStakerValidators.addVIdx(stakerIdx, validatorIndexHex, index)
 	}
-	return true
+	return defaultStakerValidators.removeVIdx(stakerIdx, validatorIndexHex, index)
 }
 
-func ResetStakerValidatorsForAll(stakerInfos []*oracletypes.StakerInfo) {
-	lock.Lock()
-	stakerValidators = make(map[int]*validatorList)
-	for _, stakerInfo := range stakerInfos {
-		validators := make([]string, 0, len(stakerInfo.ValidatorPubkeyList))
-		for _, validatorPubkey := range stakerInfo.ValidatorPubkeyList {
-			validatorPubkeyBytes, _ := hexutil.Decode(validatorPubkey)
-			validatorPubkeyNum := new(big.Int).SetBytes(validatorPubkeyBytes).String()
-			validators = append(validators, validatorPubkeyNum)
-		}
-
-		index := uint64(0)
-		// TODO: this may not necessary, stakerInfo should have at least one entry in balanceList
-		if l := len(stakerInfo.BalanceList); l > 0 {
-			index = stakerInfo.BalanceList[l-1].Index
-		}
-		stakerValidators[int(stakerInfo.StakerIndex)] = &validatorList{
-			index:      index,
-			validators: validators,
-		}
-	}
-	lock.Unlock()
-}
-
-func Fetch(token string) (*types.PriceInfo, error) {
+func (s *source) fetch(token string) (*types.PriceInfo, error) {
 	// check epoch, when epoch updated, update effective-balance
-	if token != types.NativeTokenETH {
-		logger.Error("only support native-eth-restaking", "expect", types.NativeTokenETH, "got", token)
-		return nil, errTokenNotSupported
+	if types.NSTToken(token) != types.NativeTokenETH {
+		return nil, feedertypes.ErrTokenNotSupported.Wrap(fmt.Sprintf("only support native-eth-restaking %s", types.NativeTokenETH))
 	}
+
+	stakerValidators := defaultStakerValidators.getStakerValidators()
+	if len(stakerValidators) == 0 {
+		// return zero price when there's no stakers
+		return &types.PriceInfo{}, nil
+	}
+
 	// check if finalized epoch had been updated
 	epoch, stateRoot, err := getFinalizedEpoch()
 	if err != nil {
-		logger.Error("fail to get finalized epoch from beaconchain", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("fail to get finalized epoch from beaconchain, error:%w", err)
 	}
 
 	// epoch not updated, just return without fetching since effective-balance has not changed
@@ -191,9 +119,7 @@ func Fetch(token string) (*types.PriceInfo, error) {
 	}
 
 	stakerChanges := make([][]int, 0, len(stakerValidators))
-
-	lock.RLock()
-	logger.Info("fetch efb from beaconchain", "stakerList_length", len(stakerValidators))
+	s.logger.Info("fetch efb from beaconchain", "stakerList_length", len(stakerValidators))
 	hasEFBChanged := false
 	for stakerIdx, vList := range stakerValidators {
 		stakerBalance := 0
@@ -206,8 +132,7 @@ func Fetch(token string) (*types.PriceInfo, error) {
 			l -= 100
 			validatorBalances, err := getValidators(tmpValidatorPubkeys, stateRoot)
 			if err != nil {
-				logger.Error("failed to get validators from beaconchain", "error", err)
-				return nil, err
+				return nil, fmt.Errorf("failed to get validators from beaconchain, error:%w", err)
 			}
 			for _, validatorBalance := range validatorBalances {
 				stakerBalance += int(validatorBalance[1])
@@ -217,8 +142,7 @@ func Fetch(token string) (*types.PriceInfo, error) {
 		// validatorBalances, err := GetValidators(validatorIdxs, epoch)
 		validatorBalances, err := getValidators(vList.validators[i:], stateRoot)
 		if err != nil {
-			logger.Error("failed to get validators from beaconchain", "error", err)
-			return nil, err
+			return nil, fmt.Errorf("failed to get validators from beaconchain, error:%w", err)
 		}
 		for _, validatorBalance := range validatorBalances {
 			// this should be initialized from exocored
@@ -229,18 +153,16 @@ func Fetch(token string) (*types.PriceInfo, error) {
 				delta = maxChange
 			}
 			stakerChanges = append(stakerChanges, []int{stakerIdx, delta})
-			logger.Info("fetched efb from beaconchain", "staker_index", stakerIdx, "balance_change", delta)
+			s.logger.Info("fetched efb from beaconchain", "staker_index", stakerIdx, "balance_change", delta)
 			hasEFBChanged = true
 		}
 	}
 	if !hasEFBChanged && len(stakerValidators) > 0 {
-		logger.Info("fetch efb from beaconchain, all efbs of validators remains to 32 without any change")
+		s.logger.Info("fetch efb from beaconchain, all efbs of validators remains to 32 without any change")
 	}
 	sort.Slice(stakerChanges, func(i, j int) bool {
 		return stakerChanges[i][0] < stakerChanges[j][0]
 	})
-
-	lock.RUnlock()
 
 	finalizedEpoch = epoch
 
@@ -250,6 +172,11 @@ func Fetch(token string) (*types.PriceInfo, error) {
 		Price:   string(latestChangesBytes),
 		RoundID: strconv.FormatUint(finalizedEpoch, 10),
 	}, nil
+}
+
+// reload does nothing since beaconchain source only used to update the balance change for nsteth
+func (s *source) reload(token, cfgPath string) error {
+	return nil
 }
 
 func convertBalanceChangeToBytes(stakerChanges [][]int) []byte {

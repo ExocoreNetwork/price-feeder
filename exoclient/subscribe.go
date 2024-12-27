@@ -2,265 +2,323 @@ package exoclient
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
+type subEvent string
+type eventQuery string
+
 const (
-	subTypeNewBlock      = "tm.event='NewBlock'"
-	subTypeTxUpdatePrice = "tm.event='Tx' AND create_price.price_update='success'"
-	subTypeTxNativeToken = "tm.event='Tx' AND create_price.native_token_update='update'"
-	sub                  = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
-	reconnectInterval    = 3
-	maxRetry             = 600
-	success              = "success"
+	//	subTypeNewBlock      subType = "tm.event='NewBlock'"
+	//	subTypeTxUpdatePrice subType = "tm.event='Tx' AND create_price.price_update='success'"
+	//	subTypeTxNativeToken subType = "tm.event='Tx' AND create_price.native_token_update='update'"
+	subStr                       = `{"jsonrpc":"2.0","method":"subscribe","id":0,"params":{"query":"%s"}}`
+	reconnectInterval            = 3
+	maxRetry                     = 600
+	success                      = "success"
+	eNewBlock         eventQuery = "tm.event='NewBlock'"
+	eTxUpdatePrice    eventQuery = "tm.event='Tx' AND create_price.price_update='success'"
+	eTxNativeToken    eventQuery = "tm.event='Tx' AND create_price.native_token_update='update'"
 )
 
 var (
-	conn               *websocket.Conn
-	rHeader            http.Header
-	host               string
-	eventNewBlock      = fmt.Sprintf(sub, subTypeNewBlock)
-	eventTxPrice       = fmt.Sprintf(sub, subTypeTxUpdatePrice)
-	eventTxNativeToken = fmt.Sprintf(sub, subTypeTxNativeToken)
+	// subNewBlock      subEvent = subEvent(fmt.Sprintf(subStr, "tm.event='NewBlock'"))
+	subNewBlock subEvent = subEvent(fmt.Sprintf(subStr, eNewBlock))
+	// subTxUpdatePrice subEvent = subEvent(fmt.Sprintf(subStr, "tm.event='Tx' AND create_price.price_update='success'"))
+	subTxUpdatePrice subEvent = subEvent(fmt.Sprintf(subStr, eTxUpdatePrice))
+	// subTxNativeToken subEvent = subEvent(fmt.Sprintf(subStr, "tm.event='Tx' AND create_price.native_token_update='update'"))
+	subTxNativeToken subEvent = subEvent(fmt.Sprintf(subStr, eTxNativeToken))
+	//	eNewBlock        subEvent = "tm.event='NewBlock'"
+	//	eTxUpdatePrice   subEvent = "tm.event='Tx' AND create_price.price_update='success'"
+	//	eTxNativeToken   subEvent = "tm.event='Tx' AND create_price.native_token_update='update'"
 
-	events = map[string]bool{
-		eventNewBlock:      true,
-		eventTxPrice:       true,
-		eventTxNativeToken: true,
+	events = map[subEvent]bool{
+		subNewBlock:      true,
+		subTxUpdatePrice: true,
+		subTxNativeToken: true,
 	}
 )
 
-type result struct {
-	Result struct {
-		Query string `json:"query"`
-		Data  struct {
-			Value struct {
-				TxResult struct {
-					Height string `json:"height"`
-				} `json:"TxResult"`
-				Block struct {
-					Header struct {
-						Height string `json:"height"`
-					} `json:"header"`
-				} `json:"block"`
-			} `json:"value"`
-		} `json:"data"`
-		Events struct {
-			Fee               []string `json:"fee_market.base_fee"`
-			ParamsUpdate      []string `json:"create_price.params_update"`
-			FinalPrice        []string `json:"create_price.final_price"`
-			PriceUpdate       []string `json:"create_price.price_update"`
-			FeederID          []string `json:"create_price.feeder_id"`
-			FeederIDs         []string `json:"create_price.feeder_ids"`
-			NativeTokenUpdate []string `json:"create_price.native_token_update"`
-			NativeTokenChange []string `json:"create_price.native_token_change"`
-		} `json:"events"`
-	} `json:"result"`
+func (ec exoClient) Subscribe() {
+	// set up a background routine to listen to 'stop' signal and restart all tasks
+	// we expect this rountine as a forever-running process unless failed more than maxretry times
+	// or failed to confirm all routines closed after timeout when reciving stop signal
+	go func() {
+		ec.logger.Info("start subscriber job with all tasks")
+		ec.startTasks()
+		defer ec.wsClient.Close()
+		for _ = range ec.wsStop {
+			ec.logger.Info("ws connection closed, mark connection as inactive and waiting for all ws routines to complete stopping")
+			// mark ws connection as inactive to prevent further ws routine starting
+			ec.markWsInactive()
+			timeout := time.NewTicker(60 * time.Second)
+		loop:
+			for {
+				select {
+				case <-timeout.C:
+					// this should not happen
+					panic("failed to complete closing  all ws routines, timeout")
+				default:
+					if ec.isZeroWsRoutines() {
+						logger.Info("all running ws routnines stopped")
+						break loop
+					}
+					time.Sleep(1 * time.Second)
+				}
+			}
+			ec.startTasks()
+		}
+	}()
 }
 
-type ReCh struct {
-	Height       string
-	Gas          string
-	ParamsUpdate bool
-	Price        []string
-	FeederIDs    string
-	TxHeight     string
-	NativeETH    string
+func (ec exoClient) EventsCh() chan EventInf {
+	return ec.wsEventsCh
 }
 
-// setup ws connection, and subscribe newblock events
-func Subscriber(remoteAddr string, endpoint string) (ret chan ReCh, stop chan struct{}) {
-	// logger := getLogger()
-	u, err := url.Parse(remoteAddr)
-	if err != nil {
-		panic(err)
+// startTasks establishes the ws connection and
+// 1. routine: send ping message
+// 2. subscribe to events
+// 3. routine: read events from ws connection
+func (ec exoClient) startTasks() {
+	// ws connection stopped, reset subscriber
+	//ec.logger.Info("establish ws connection")
+	//	if err := ec.connectWs(maxRetry); err != nil {
+	//		// continue
+	//		panic(fmt.Sprintf("failed to create ws connection after maxRetry:%d, error:%w", maxRetry, err))
+	//	}
+	ec.markWsActive()
+	ec.logger.Info("subscribe to ws publish", "events", events)
+	if err := ec.sendAllSubscribeMsgs(maxRetry); err != nil {
+		panic(fmt.Sprintf("failed to send subscribe messages after maxRetry:%d, error:%w", maxRetry, err))
 	}
 
-	dialer := &websocket.Dialer{
-		NetDial: func(_, _ string) (net.Conn, error) {
-			return net.Dial("tcp", u.Host)
-		},
-		Proxy: http.ProxyFromEnvironment,
+	// start routine to send ping messages
+	ec.logger.Info("start ws ping routine")
+	ec.startPingRoutine()
+
+	// start routine to read events response
+	ec.logger.Info("start ws read routine")
+	ec.startReadRoutine()
+	ec.logger.Info("setuped all subscriber tasks successfully")
+}
+
+func (ec exoClient) connectWs(maxRetry int) error {
+	if len(ec.wsEndpoint) == 0 {
+		return errors.New("wsEndpoint not set in exoClient")
 	}
-	rHeader = http.Header{}
-	host = u.Host
-	conn, _, err = dialer.Dial("ws://"+host+endpoint, rHeader)
-
-	if err != nil {
-		panic(fmt.Sprintf("dail ws failed, error:%s", err))
+	var err error
+	//	ec.wsClient.Close()
+	count := 0
+	for count < maxRetry {
+		if ec.wsClient, _, err = ec.wsDialer.Dial(ec.wsEndpoint, http.Header{}); err == nil {
+			ec.wsClient.SetPongHandler(func(string) error {
+				return nil
+			})
+			ec.wsStop = make(chan struct{})
+			ec.markWsActive()
+			return nil
+		}
+		count++
+		ec.logger.Info("connecting to ws endpoint", "endpoint", ec.wsEndpoint, "attempt_count", count, "error", err)
+		time.Sleep(reconnectInterval * time.Second)
 	}
+	return fmt.Errorf("failed to dial ws endpoint, endpoint:%s, error:%w", ec.wsEndpoint, err)
+}
 
-	stop = make(chan struct{})
-	stopInternal := make(chan struct{})
-	ret = make(chan ReCh)
+func (ec *exoClient) StopWsRoutines() {
+	ec.wsLock.Lock()
+	select {
+	case _, ok := <-ec.wsStop:
+		if ok {
+			close(ec.wsStop)
+		}
+	default:
+		close(ec.wsStop)
+	}
+	ec.wsLock.Unlock()
+}
 
-	// read routine reads events(newBlock) from websocket
+func (ec *exoClient) increaseWsRountines() (int, bool) {
+	// only increase active rountine count when the wsConnection is active
+	ec.wsLock.Lock()
+	defer ec.wsLock.Unlock()
+	if *ec.wsActive {
+		(*ec.wsActiveRoutines)++
+		return *ec.wsActiveRoutines, true
+	}
+	return *ec.wsActiveRoutines, false
+}
+
+func (ec *exoClient) decreaseWsRountines() (int, bool) {
+	ec.wsLock.Lock()
+	defer ec.wsLock.Unlock()
+	if *ec.wsActive {
+		if (*ec.wsActiveRoutines)--; *ec.wsActiveRoutines < 0 {
+			*ec.wsActiveRoutines = 0
+		}
+		return *ec.wsActiveRoutines, true
+	}
+	return *ec.wsActiveRoutines, false
+}
+
+func (ec *exoClient) isZeroWsRoutines() bool {
+	ec.wsLock.Lock()
+	isZero := *ec.wsActiveRoutines == 0
+	ec.wsLock.Unlock()
+	return isZero
+}
+
+func (ec *exoClient) markWsActive() {
+	ec.wsLock.Lock()
+	*ec.wsActive = true
+	ec.wsLock.Unlock()
+
+}
+
+func (ec *exoClient) markWsInactive() {
+	ec.wsLock.Lock()
+	*ec.wsActive = false
+	ec.wsLock.Unlock()
+}
+
+func (ec exoClient) sendAllSubscribeMsgs(maxRetry int) error {
+	// at least try for one time
+	if maxRetry < 1 {
+		maxRetry = 1
+	}
+	// reset events for re-subscribing
+	resetEvents()
+	allSet := false
+	for maxRetry > 0 && !allSet {
+		maxRetry--
+		allSet = true
+		for event, ok := range events {
+			if ok {
+				allSet = false
+			}
+			if err := ec.wsClient.WriteMessage(websocket.TextMessage, []byte(event)); err == nil {
+				events[event] = false
+				allSet = true
+			} else {
+				ec.logger.Error("failed to send subscribe", "message", event, "error", err)
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if !allSet {
+		return errors.New(fmt.Sprintf("failed to send all subscribe messages, events:%v", events))
+	}
+	return nil
+}
+
+func (ec exoClient) startPingRoutine() bool {
+	if _, ok := ec.increaseWsRountines(); !ok {
+		// ws connection is not active
+		return ok
+	}
 	go func() {
 		defer func() {
-			conn.Close()
+			ec.decreaseWsRountines()
 		}()
-		conn.SetPongHandler(func(string) error {
-			return nil
-		})
+		ticker := time.NewTicker(10 * time.Second)
+		defer func() {
+			ticker.Stop()
+		}()
 		for {
-			_, data, err := conn.ReadMessage()
-			if err != nil {
-				logger.Error("read from publisher failed", "error", err)
-				if !websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
+			select {
+			case <-ticker.C:
+				if err := ec.wsClient.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+					logger.Error("failed to write ping message to ws connection, close ws connection, ", "error", err)
+					logger.Info("send signal to stop all running ws routines")
+					ec.StopWsRoutines()
 					return
 				}
-				// close write routine
-				close(stopInternal)
-				// reconnect ws
-				attempt := 0
-				for ; err != nil; conn, _, err = dialer.Dial("ws://"+host+endpoint, rHeader) {
-					logger.Error("failed to reconnect to publisher, retrying...", "error", err, "attempt_count", attempt)
-					time.Sleep(reconnectInterval * time.Second)
-					attempt++
-					if attempt > maxRetry {
-						logger.Error("failed to reconnect to publisher after max retry")
-						return
-					}
+			case <-ec.wsStop:
+				logger.Info("close ws ping routine due to receiving close signal")
+				if err := ec.wsClient.WriteMessage(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+				); err != nil {
+					logger.Error("failed to write close message to publisher", "error", err)
+					return
 				}
-				logger.Info("reconnected to publisher successfully.")
-				conn.SetPongHandler(func(string) error {
-					return nil
-				})
-				// rest stopInternal
-				stopInternal = make(chan struct{})
-				// setup write routine to set ping messages
-				go writeRoutine(conn, stopInternal)
-				// resubscribe event
-				attempt = 0
-				for attempt < maxRetry {
-					if err = conn.WriteMessage(websocket.TextMessage, []byte(eventNewBlock)); err == nil {
+			}
+		}
+	}()
+	return true
+}
+
+func (ec exoClient) startReadRoutine() bool {
+	if _, ok := ec.increaseWsRountines(); !ok {
+		// ws connection is not active
+		return ok
+	}
+	go func() {
+		defer func() {
+			ec.decreaseWsRountines()
+		}()
+		for {
+			select {
+			case <-ec.wsStop:
+				ec.logger.Info("close ws read routine due to receive close signal")
+				return
+			default:
+				_, data, err := ec.wsClient.ReadMessage()
+				if err != nil {
+					ec.logger.Error("failed to read from ws publisher", "error", err)
+					if !websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
+						// TODO: retry ?
+						panic(fmt.Sprintf("Got unexpectedCloseError from ws connection, error:%v", err))
+					}
+					logger.Info("send signal to stop all running ws routines")
+					// send signal to stop all running ws routines
+					ec.StopWsRoutines()
+					return
+				}
+				var response SubscribeResult
+				err = json.Unmarshal(data, &response)
+				if err != nil {
+					ec.logger.Error("failed to parse response from publisher, skip", "error", err)
+					continue
+				}
+				switch eventQuery(response.Result.Query) {
+				case eNewBlock:
+					event, err := response.GetEventNewBlock()
+					if err != nil {
+						ec.logger.Error("failed to get newBlock event from event-response", "response", response, "error", err)
+					}
+					ec.wsEventsCh <- event
+				case eTxUpdatePrice:
+					event, err := response.GetEventUpdatePrice()
+					if err != nil {
+						ec.logger.Error("failed to get updatePrice event from event-response", "response", response, "error", err)
 						break
 					}
-					logger.Error("failed to subscribe to new_block event, retrying", "error", err, "attempt_cout", attempt)
-					time.Sleep(1 * time.Second)
-					attempt++
+					ec.wsEventsCh <- event
+				case eTxNativeToken:
+					// update validator list for staker
+					event, err := response.GetEventUpdateNST()
+					if err != nil {
+						ec.logger.Error("failed to get nativeToken event from event-response", "response", response, "error", err)
+						break
+					}
+					ec.wsEventsCh <- event
+				default:
+					ec.logger.Error("failed to parse unknown event type", "response-data", string(data))
 				}
-				if attempt == maxRetry {
-					logger.Error("fail to subscribe new_block event after max retry")
-					return
-				}
-				continue
-			}
-			var response result
-			err = json.Unmarshal(data, &response)
-			if err != nil {
-				logger.Error("failed to pase response from publisher, skip", "error", err)
-				continue
-			}
-			rec := ReCh{}
-
-			switch response.Result.Query {
-			case subTypeNewBlock:
-				rec.Height = response.Result.Data.Value.Block.Header.Height
-				events := response.Result.Events
-				if len(events.Fee) > 0 {
-					rec.Gas = events.Fee[0]
-				}
-				if len(events.ParamsUpdate) > 0 {
-					rec.ParamsUpdate = true
-				}
-				// TODO: for oracle v1, this should not happen, since this event only emitted in tx, But if we add more modes to support final price generation in endblock, this would be necessaray.
-				if len(events.PriceUpdate) > 0 && events.PriceUpdate[0] == success {
-					rec.FeederIDs = events.FeederIDs[0]
-				}
-				ret <- rec
-			case subTypeTxUpdatePrice:
-				// as we filtered for price_udpate=success, this means price has been updated this block
-				events := response.Result.Events
-				rec.Price = events.FinalPrice
-				rec.TxHeight = response.Result.Data.Value.TxResult.Height
-				ret <- rec
-			case subTypeTxNativeToken:
-				// update validator list for staker
-				rec.NativeETH = response.Result.Events.NativeTokenChange[0]
-			default:
-			}
-
-			select {
-			case <-stop:
-				return
-			default:
 			}
 		}
 	}()
-
-	// write message to subscribe tx event for price update
-	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventTxPrice)); err != nil {
-		panic("fail to subscribe tx event")
-	}
-
-	// write message to subscribe tx event for native token validator list change
-	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventTxPrice)); err != nil {
-		panic("fail to subscribe tx event")
-	}
-
-	// write message to subscribe newBlock event
-	if err = conn.WriteMessage(websocket.TextMessage, []byte(eventNewBlock)); err != nil {
-		panic("fail to subscribe new_block event")
-	}
-
-	// write routine sends ping messages every 10 seconds
-	go writeRoutine(conn, stopInternal)
-	return
+	return true
 }
 
-// writeRoutine sends ping messages every 10 second
-func writeRoutine(conn *websocket.Conn, stop chan struct{}) {
-	// logger := getLogger()
-	ticker := time.NewTicker(10 * time.Second)
-	defer func() {
-		ticker.Stop()
-	}()
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				panic(err)
-			}
-		case <-stop:
-			if err := conn.WriteMessage(
-				websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
-			); err != nil {
-				logger.Error("failed to write close message to publisher", "error", err)
-				return
-			}
-		}
-	}
-}
-
-func ResetEvents() {
+func resetEvents() {
 	for event, _ := range events {
 		events[event] = true
-	}
-}
-
-func SubEvents(conn *websocket.Conn, retryCount int, retryInterval time.Duration) {
-	// logger := getLogger()
-	for event, ok := range events {
-		retryCount--
-		if ok {
-			if err := conn.WriteMessage(websocket.TextMessage, []byte(event)); err == nil {
-				logger.Info("subscribes event succussfully", "event", event)
-				events[event] = false
-			}
-		}
-		if retryCount == 0 {
-			logger.Error("failed to subscribe to all events", "events", events)
-			panic("fail to subscribe events")
-		}
-		time.Sleep(retryInterval * time.Second)
 	}
 }
