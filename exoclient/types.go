@@ -338,7 +338,6 @@ const (
 	// current version of 'Oracle' only support id=1(chainlink) as valid source
 	Chainlink uint64 = 1
 	denom            = "hua"
-	layout           = "2006-01-02 15:04:05"
 )
 
 const (

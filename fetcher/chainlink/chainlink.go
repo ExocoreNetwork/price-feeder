@@ -35,7 +35,7 @@ func (s *source) fetch(token string) (*fetchertypes.PriceInfo, error) {
 	return &fetchertypes.PriceInfo{
 		Price:     roundData.Answer.String(),
 		Decimal:   int32(decimals),
-		Timestamp: time.Now().String(),
+		Timestamp: time.Now().UTC().Format(feedertypes.TimeLayout),
 		RoundID:   roundData.RoundId.String(),
 	}, nil
 }

@@ -7,10 +7,10 @@ import (
 
 	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
-	"github.com/cosmos/cosmos-sdk/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
@@ -30,7 +30,7 @@ func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price fetchertypes
 					{
 						Price:     price.Price,
 						Decimal:   price.Decimal,
-						Timestamp: time.Now().UTC().Format(layout),
+						Timestamp: time.Now().UTC().Format(feedertypes.TimeLayout),
 						DetID:     price.RoundID,
 					},
 				},
@@ -73,7 +73,7 @@ func (ec exoClient) signMsg(msgs ...sdk.Msg) (authsigning.Tx, error) {
 	txBuilder := ec.txCfg.NewTxBuilder()
 	_ = txBuilder.SetMsgs(msgs...)
 	txBuilder.SetGasLimit(blockMaxGas)
-	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin(denom, 0)})
+	txBuilder.SetFeeAmount(sdk.Coins{sdk.NewInt64Coin(denom, 0)})
 
 	if err := txBuilder.SetSignatures(ec.getSignature(nil)); err != nil {
 		ec.logger.Error("failed to SetSignatures", "errro", err)
