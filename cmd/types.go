@@ -254,6 +254,9 @@ func (f *feeder) trigger(commitHeight, priceHeight int64) {
 }
 
 func (f *feeder) updateFeederParams(p *oracletypes.Params) {
+	if p == nil || len(p.TokenFeeders) == 0 {
+		return
+	}
 	// TODO: update feeder's params
 
 }
@@ -302,8 +305,9 @@ func (fm feederMap) NewFeeders(logger feedertypes.LoggerInf) *Feeders {
 		// don't block on height increasing
 		trigger:     make(chan *triggerReq, 1),
 		updatePrice: make(chan *updatePricesReq, 1),
-		// block on update-params delivery, no buffer
-		updateParams: make(chan *oracletypes.Params),
+		// it's safe to have a buffer to not block running feeders,
+		// since for running feeders, only endBlock is possible to be modified
+		updateParams: make(chan *oracletypes.Params, 1),
 	}
 }
 
@@ -411,8 +415,7 @@ func (fs *Feeders) UpdatePrice(txHeight int64, prices []*finalPrice) {
 }
 
 // UpdateOracleParams updates all feeders' params from oracle params
-// blocking until all feeders update their params
-// when this method returned, it's guaranteed no further actions received wll be executed unless that all feeders have updated their params
+// if the receiving channel is full, blocking until all updateParams are received by the channel
 func (fs *Feeders) UpdateOracleParams(p *oracletypes.Params) {
 	fs.updateParams <- p
 }
