@@ -9,7 +9,6 @@ import (
 	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
-	types "github.com/ExocoreNetwork/price-feeder/types"
 
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 )
@@ -113,6 +112,14 @@ type FeederInfo struct {
 }
 
 func (f *feeder) Info() FeederInfo {
+	var lastPrice localPrice
+	var lastSent signInfo
+	if f.lastPrice != nil {
+		lastPrice = *f.lastPrice
+	}
+	if f.lastSent != nil {
+		lastSent = *f.lastSent
+	}
 	return FeederInfo{
 		Source:         f.source,
 		Token:          f.token,
@@ -122,8 +129,8 @@ func (f *feeder) Info() FeederInfo {
 		StartBaseBlock: f.startBaseBlock,
 		Interval:       f.interval,
 		EndBlock:       f.endBlock,
-		LastPrice:      *f.lastPrice,
-		LastSent:       *f.lastSent,
+		LastPrice:      lastPrice,
+		LastSent:       lastSent,
 	}
 }
 
@@ -445,9 +452,13 @@ func (fs *Feeders) UpdatePrice(txHeight int64, prices []*finalPrice) {
 // UpdateOracleParams updates all feeders' params from oracle params
 // if the receiving channel is full, blocking until all updateParams are received by the channel
 func (fs *Feeders) UpdateOracleParams(p *oracletypes.Params) {
+	if p == nil {
+		fs.logger.Error("received nil oracle params")
+		return
+	}
+	if len(p.TokenFeeders) == 0 {
+		fs.logger.Error("received empty token feeders")
+		return
+	}
 	fs.updateParams <- p
-}
-
-func getLogger() types.LoggerInf {
-	return types.GetLogger("")
 }
