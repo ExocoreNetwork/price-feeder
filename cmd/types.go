@@ -215,6 +215,7 @@ func (f *feeder) start() {
 				f.lastPrice.height = price.txHeight
 			case req := <-f.paramsCh:
 				if err := f.updateFeederParams(req.params); err != nil {
+					// This should not happen under this case.
 					f.logger.Error("failed to update params", "new params", req.params)
 				}
 				req.result <- &updateParamsRes{}
@@ -267,6 +268,9 @@ func (f *feeder) updateFeederParams(p *oracletypes.Params) error {
 	}
 	if f.startBaseBlock != int64(tokenFeeder.StartBaseBlock) {
 		f.startBaseBlock = int64(tokenFeeder.StartBaseBlock)
+	}
+	if f.interval != int64(tokenFeeder.Interval) {
+		f.interval = int64(tokenFeeder.Interval)
 	}
 	if p.MaxNonce > 0 {
 		f.lastSent.maxNonce = p.MaxNonce
