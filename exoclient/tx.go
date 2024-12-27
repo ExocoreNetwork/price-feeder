@@ -5,89 +5,33 @@ import (
 	"fmt"
 	"time"
 
-	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 
-	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
-
-	"github.com/cosmos/cosmos-sdk/client"
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
-	"github.com/cosmos/cosmos-sdk/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
-
-	"google.golang.org/grpc"
 )
 
-// signMsg signs the message with consensusskey
-func signMsg(cc *grpc.ClientConn, gasPrice int64, msgs ...sdk.Msg) authsigning.Tx {
-	txBuilder := txCfg.NewTxBuilder()
-	_ = txBuilder.SetMsgs(msgs...)
-	txBuilder.SetGasLimit(blockMaxGas)
-	txBuilder.SetFeeAmount(sdk.Coins{types.NewInt64Coin(denom, 0)})
-
-	signMode := txCfg.SignModeHandler().DefaultMode()
-
-	_ = txBuilder.SetSignatures(getSignature(nil, pubKey, signMode))
-
-	bytesToSign := getSignBytes(txCfg, txBuilder.GetTx(), chainID)
-	sigBytes, err := privKey.Sign(bytesToSign)
-	if err != nil {
-		panic(fmt.Sprintf("priv_sign fail %s", err.Error()))
-	}
-	_ = txBuilder.SetSignatures(getSignature(sigBytes, pubKey, signMode))
-	return txBuilder.GetTx()
-}
-
-// getSignBytes reteive the bytes from tx for signing
-func getSignBytes(txCfg client.TxConfig, tx authsigning.Tx, cID string) []byte {
-	b, err := txCfg.SignModeHandler().GetSignBytes(
-		txCfg.SignModeHandler().DefaultMode(),
-		authsigning.SignerData{
-			ChainID: cID,
-		},
-		tx,
-	)
-	if err != nil {
-		panic(fmt.Sprintf("Get bytesToSign fail, %s", err.Error()))
-	}
-
-	return b
-}
-
-// getSignature assembles a siging.SignatureV2 structure
-func getSignature(s []byte, pub cryptotypes.PubKey, signMode signing.SignMode) signing.SignatureV2 {
-	sig := signing.SignatureV2{
-		PubKey: pub,
-		Data: &signing.SingleSignatureData{
-			SignMode:  signMode,
-			Signature: s,
-		},
-	}
-
-	return sig
-}
-
-// SendTx build a create-price message and broadcast to the exocoreChain through grpc connection
-func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, roundID string, decimal int, nonce int32, gasPrice int64) *sdktx.BroadcastTxResponse {
-	if gasPrice == 0 {
-		gasPrice = defaultGasPrice
-	}
-
+// SendTx signs a create-price transaction and send it to exocored
+// func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price, roundID string, decimal int, nonce int32) (*sdktx.BroadcastTxResponse, error) {
+func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*sdktx.BroadcastTxResponse, error) {
 	// build create-price message
-	msg := oracleTypes.NewMsgCreatePrice(
-		sdk.AccAddress(pubKey.Address()).String(),
+	msg := oracletypes.NewMsgCreatePrice(
+		sdk.AccAddress(ec.pubKey.Address()).String(),
 		feederID,
-		[]*oracleTypes.PriceSource{
+		[]*oracletypes.PriceSource{
 			{
 				SourceID: Chainlink,
-				Prices: []*oracleTypes.PriceTimeDetID{
+				Prices: []*oracletypes.PriceTimeDetID{
 					{
-						Price:     price,
-						Decimal:   int32(decimal),
-						Timestamp: time.Now().UTC().Format(layout),
-						DetID:     roundID,
+						Price:     price.Price,
+						Decimal:   price.Decimal,
+						Timestamp: time.Now().UTC().Format(feedertypes.TimeLayout),
+						DetID:     price.RoundID,
 					},
 				},
 				Desc: "",
@@ -98,21 +42,20 @@ func SendTx(cc *grpc.ClientConn, feederID uint64, baseBlock uint64, price, round
 	)
 
 	// sign the message with validator consensus-key configured
-	signedTx := signMsg(cc, gasPrice, msg)
-
-	// encode transaction to broadcast
-	txBytes, err := txCfg.TxEncoder()(signedTx)
+	signedTx, err := ec.signMsg(msg)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to sign message, msg:%v, valConsAddr:%s, error:%w", msg, sdk.ConsAddress(ec.pubKey.Address()), err)
 	}
 
-	return broadcastTxBytes(cc, txBytes)
-}
+	// encode transaction to broadcast
+	txBytes, err := ec.txCfg.TxEncoder()(signedTx)
+	if err != nil {
+		// this should not happen
+		return nil, fmt.Errorf("failed to encode singedTx, txBytes:%b, msg:%v, valConsAddr:%s, error:%w", txBytes, msg, sdk.ConsAddress(ec.pubKey.Address()), err)
+	}
 
-// boradcastTxByBytes broadcasts the signed transaction
-func broadcastTxBytes(cc *grpc.ClientConn, txBytes []byte) *sdktx.BroadcastTxResponse {
-	txClient := sdktx.NewServiceClient(cc)
-	ccRes, err := txClient.BroadcastTx(
+	// broadcast txBytes
+	res, err := ec.txClient.BroadcastTx(
 		context.Background(),
 		&sdktx.BroadcastTxRequest{
 			Mode:    sdktx.BroadcastMode_BROADCAST_MODE_SYNC,
@@ -120,7 +63,61 @@ func broadcastTxBytes(cc *grpc.ClientConn, txBytes []byte) *sdktx.BroadcastTxRes
 		},
 	)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to braodcast transaction, msg:%v, valConsAddr:%s, error:%w", msg, sdk.ConsAddress(ec.pubKey.Address()), err)
 	}
-	return ccRes
+	return res, nil
+}
+
+// signMsg signs the message with consensusskey
+func (ec exoClient) signMsg(msgs ...sdk.Msg) (authsigning.Tx, error) {
+	txBuilder := ec.txCfg.NewTxBuilder()
+	_ = txBuilder.SetMsgs(msgs...)
+	txBuilder.SetGasLimit(blockMaxGas)
+	txBuilder.SetFeeAmount(sdk.Coins{sdk.NewInt64Coin(denom, 0)})
+
+	if err := txBuilder.SetSignatures(ec.getSignature(nil)); err != nil {
+		ec.logger.Error("failed to SetSignatures", "errro", err)
+		return nil, err
+	}
+
+	bytesToSign, err := ec.getSignBytes(txBuilder.GetTx())
+	if err != nil {
+		return nil, fmt.Errorf("failed to getSignBytes, error:%w", err)
+	}
+	sigBytes, err := ec.privKey.Sign(bytesToSign)
+	if err != nil {
+		ec.logger.Error("failed to sign txBytes", "error", err)
+		return nil, err
+	}
+	// _ = txBuilder.SetSignatures(getSignature(sigBytes, ec.pubKey, signMode))
+	_ = txBuilder.SetSignatures(ec.getSignature(sigBytes))
+	return txBuilder.GetTx(), nil
+}
+
+// getSignBytes reteive the bytes from tx for signing
+func (ec exoClient) getSignBytes(tx authsigning.Tx) ([]byte, error) {
+	b, err := ec.txCfg.SignModeHandler().GetSignBytes(
+		ec.txCfg.SignModeHandler().DefaultMode(),
+		authsigning.SignerData{
+			ChainID: ec.chainID,
+		},
+		tx,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("Get bytesToSign fail, %w", err)
+	}
+
+	return b, nil
+}
+
+// getSignature assembles a siging.SignatureV2 structure
+func (ec exoClient) getSignature(sigBytes []byte) signing.SignatureV2 {
+	signature := signing.SignatureV2{
+		PubKey: ec.pubKey,
+		Data: &signing.SingleSignatureData{
+			SignMode:  ec.txCfg.SignModeHandler().DefaultMode(),
+			Signature: sigBytes,
+		},
+	}
+	return signature
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func TestQuery(t *testing.T) {
-	cc := CreateGrpcConn("127.0.0.1:9090")
+	cc, _, _ := CreateGrpcConn("127.0.0.1:9090")
 	defer cc.Close()
 	p, err := GetParams(cc)
 	assert.NoError(t, err)

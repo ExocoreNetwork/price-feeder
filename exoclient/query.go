@@ -2,28 +2,26 @@ package exoclient
 
 import (
 	"context"
+	"fmt"
 
 	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"google.golang.org/grpc"
 )
 
 // GetParams queries oracle params
-func GetParams(grpcConn *grpc.ClientConn) (oracleTypes.Params, error) {
-	oracleClient := oracleTypes.NewQueryClient(grpcConn)
-	paramsRes, err := oracleClient.Params(context.Background(), &oracleTypes.QueryParamsRequest{})
+func (ec exoClient) GetParams() (*oracleTypes.Params, error) {
+	paramsRes, err := ec.oracleClient.Params(context.Background(), &oracleTypes.QueryParamsRequest{})
 	if err != nil {
-		return oracleTypes.Params{}, err
+		return &oracleTypes.Params{}, fmt.Errorf("failed to query oracle params from oracleClient, error:%w", err)
 	}
+	return &paramsRes.Params, nil
 
-	return paramsRes.Params, nil
 }
 
 // GetLatestPrice returns latest price of specific token
-func GetLatestPrice(grpcConn *grpc.ClientConn, tokenID uint64) (oracleTypes.PriceTimeRound, error) {
-	oracleClient := oracleTypes.NewQueryClient(grpcConn)
-	priceRes, err := oracleClient.LatestPrice(context.Background(), &oracleTypes.QueryGetLatestPriceRequest{TokenId: tokenID})
+func (ec exoClient) GetLatestPrice(tokenID uint64) (oracleTypes.PriceTimeRound, error) {
+	priceRes, err := ec.oracleClient.LatestPrice(context.Background(), &oracleTypes.QueryGetLatestPriceRequest{TokenId: tokenID})
 	if err != nil {
-		return oracleTypes.PriceTimeRound{}, err
+		return oracleTypes.PriceTimeRound{}, fmt.Errorf("failed to get latest price from oracleClient, error:%w", err)
 	}
 	return priceRes.Price, nil
 
@@ -31,21 +29,19 @@ func GetLatestPrice(grpcConn *grpc.ClientConn, tokenID uint64) (oracleTypes.Pric
 
 // TODO: pagination
 // GetStakerInfos get all stakerInfos for the assetID
-func GetStakerInfos(grpcConn *grpc.ClientConn, assetID string) ([]*oracleTypes.StakerInfo, error) {
-	oracleClient := oracleTypes.NewQueryClient(grpcConn)
-	stakerInfoRes, err := oracleClient.StakerInfos(context.Background(), &oracleTypes.QueryStakerInfosRequest{AssetId: assetID})
+func (ec exoClient) GetStakerInfos(assetID string) ([]*oracleTypes.StakerInfo, error) {
+	stakerInfoRes, err := ec.oracleClient.StakerInfos(context.Background(), &oracleTypes.QueryStakerInfosRequest{AssetId: assetID})
 	if err != nil {
-		return []*oracleTypes.StakerInfo{}, err
+		return []*oracleTypes.StakerInfo{}, fmt.Errorf("failed to get stakerInfos from oracleClient, error:%w", err)
 	}
 	return stakerInfoRes.StakerInfos, nil
 }
 
 // GetStakerInfos get the stakerInfos corresponding to stakerAddr for the assetID
-func GetStakerInfo(grpcConn *grpc.ClientConn, assetID, stakerAddr string) ([]*oracleTypes.StakerInfo, error) {
-	oracleClient := oracleTypes.NewQueryClient(grpcConn)
-	stakerInfoRes, err := oracleClient.StakerInfos(context.Background(), &oracleTypes.QueryStakerInfosRequest{AssetId: assetID})
+func (ec exoClient) GetStakerInfo(assetID, stakerAddr string) ([]*oracleTypes.StakerInfo, error) {
+	stakerInfoRes, err := ec.oracleClient.StakerInfos(context.Background(), &oracleTypes.QueryStakerInfosRequest{AssetId: assetID})
 	if err != nil {
-		return []*oracleTypes.StakerInfo{}, err
+		return []*oracleTypes.StakerInfo{}, fmt.Errorf("failed to get stakerInfo from oracleClient, error:%w", err)
 	}
 	return stakerInfoRes.StakerInfos, nil
 }
