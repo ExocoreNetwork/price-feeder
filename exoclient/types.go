@@ -158,7 +158,6 @@ func (s *SubscribeResult) GetEventUpdateNST() (*EventUpdateNST, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse stakerID in nstChange from evetn_txUpdateNST response, error:%w", err)
 	}
-	//	validatorIndex, err := strconv.ParseInt(strings.TrimPrefix(parsed[2], "0x"), 16, 64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse beaconchain_valdiatorIndex in nstChange from event_txUpdateNST response, error:%w", err)
 	}
@@ -167,9 +166,8 @@ func (s *SubscribeResult) GetEventUpdateNST() (*EventUpdateNST, error) {
 		return nil, fmt.Errorf("failed to parse beaconchain_sync_index in nstChange from event_txUpdateNST response, error:%w", err)
 	}
 	return &EventUpdateNST{
-		deposit:  deposit,
-		stakerID: stakerID,
-		// validatorIndex: validatorIndex,
+		deposit:        deposit,
+		stakerID:       stakerID,
 		validatorIndex: parsed[2],
 		index:          index,
 	}, nil

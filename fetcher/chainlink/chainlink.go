@@ -19,7 +19,7 @@ import (
 func (s *source) fetch(token string) (*fetchertypes.PriceInfo, error) {
 	chainlinkPriceFeedProxy, ok := s.chainlinkProxy.get(token)
 	if !ok {
-		return nil, feedertypes.ErrSrouceTokenNotConfigured.Wrap(fmt.Sprintf("failed to get chainlinkProxy for token:%s for not set", token))
+		return nil, feedertypes.ErrSourceTokenNotConfigured.Wrap(fmt.Sprintf("failed to get chainlinkProxy for token:%s for not set", token))
 	}
 
 	roundData, err := chainlinkPriceFeedProxy.LatestRoundData(&bind.CallOpts{})
@@ -66,7 +66,7 @@ func isContractAddress(addr string, client *ethclient.Client) bool {
 func (s *source) reload(cfgPath string, token string) error {
 	cfg, err := parseConfig(cfgPath)
 	if err != nil {
-		return errors.New("failed to path config file")
+		return errors.New("failed to parse config file")
 	}
 	// add new network from config file
 	for network, url := range cfg.URLs {

@@ -323,6 +323,7 @@ func (s *Source) Start() map[string]*PriceSync {
 
 // AddTokenAndStart adds token into a running source and start fetching that token
 // return (nil, false) and skip adding this token when previously adding request is not handled
+// if the token is already exist, it will that correspondin *priceSync
 func (s *Source) AddTokenAndStart(token string) *addTokenRes {
 	s.locker.Lock()
 	defer s.locker.Unlock()
@@ -378,7 +379,7 @@ func (s *Source) startFetchToken(token *tokenInfo) {
 				return
 			case <-tic.C:
 				if price, err := s.fetch(token.name); err != nil {
-					if errors.Is(err, feedertypes.ErrSrouceTokenNotConfigured) {
+					if errors.Is(err, feedertypes.ErrSourceTokenNotConfigured) {
 						s.logger.Info("token not config for source", "token", token.name)
 						s.tokenNotConfigured <- token.name
 					} else {

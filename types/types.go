@@ -153,7 +153,7 @@ var (
 
 	ErrInitFail                 = NewErr("failed to initialization")
 	ErrInitConnectionFail       = NewErr("failed to establish a connection")
-	ErrSrouceTokenNotConfigured = NewErr("token not configured")
+	ErrSourceTokenNotConfigured = NewErr("token not configured")
 	ErrTokenNotSupported        = NewErr("token not supported")
 )
 

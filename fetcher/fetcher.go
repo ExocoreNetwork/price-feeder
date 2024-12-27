@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
@@ -119,51 +120,65 @@ func (f *Fetcher) Start() error {
 	f.locker.Unlock()
 
 	go func() {
+		const timeout = 5 * time.Second
 		for {
-
 			select {
 			case req := <-f.addSourceToken:
-				if source, ok := f.sources[req.source]; ok {
-					if res := source.AddTokenAndStart(req.token); res.Error() != nil {
-						// TODO: clean logs
-						f.logger.Error("failed to AddTokenAndStart", "source", source.GetName(), "token", req.token, "error", res.Error())
-						req.result <- false
-					} else {
-						f.priceReadList[req.source][req.token] = res.Price()
-						req.result <- true
-					}
-				} else {
-					// we don't support adding source dynamically
-					f.logger.Error("failed to add token for a nonexistent soruce", "source", req.source, "token", req.token)
+				timer := time.NewTimer(timeout)
+				select {
+				case <-timer.C:
 					req.result <- false
+					f.logger.Error("timeout while adding token", "source", req.source, "token", req.token)
+				default:
+					// it's safe to add one token multiple times
+					if source, ok := f.sources[req.source]; ok {
+						if res := source.AddTokenAndStart(req.token); res.Error() != nil {
+							// TODO: clean logs
+							f.logger.Error("failed to AddTokenAndStart", "source", source.GetName(), "token", req.token, "error", res.Error())
+							req.result <- false
+						} else {
+							f.priceReadList[req.source][req.token] = res.Price()
+							req.result <- true
+						}
+					} else {
+						// we don't support adding source dynamically
+						f.logger.Error("failed to add token for a nonexistent soruce", "source", req.source, "token", req.token)
+						req.result <- false
+					}
 				}
 			case req := <-f.getLatestPrice:
-				if s := f.priceReadList[req.source]; s == nil {
+				timer := time.NewTimer(timeout)
+				select {
+				case <-timer.C:
 					req.result <- &getLatestPriceRes{
 						price: types.PriceInfo{},
-						err:   fmt.Errorf("failed to get price of token:%s from a nonexistent source:%s", req.token, req.source),
+						err:   fmt.Errorf("timeout while getting price for token %s from source %s", req.token, req.source),
 					}
-				} else if price := s[req.token]; price == nil {
-					req.result <- &getLatestPriceRes{
-						price: types.PriceInfo{},
-						err:   feedertypes.ErrSrouceTokenNotConfigured.Wrap(fmt.Sprintf("failed to get price of token:%s from a nonexistent token from an existing source:%s", req.token, req.source)),
-						// err:   fmt.Errorf("failed to get price of token:%s from a nonexistent token from an existing source:%s", req.token, req.source),
-					}
-				} else {
-					req.result <- &getLatestPriceRes{
-						price: price.Get(),
-						err:   nil,
+				default:
+					if s := f.priceReadList[req.source]; s == nil {
+						req.result <- &getLatestPriceRes{
+							price: types.PriceInfo{},
+							err:   fmt.Errorf("failed to get price of token:%s from a nonexistent source:%s", req.token, req.source),
+						}
+					} else if price := s[req.token]; price == nil {
+						req.result <- &getLatestPriceRes{
+							price: types.PriceInfo{},
+							err:   feedertypes.ErrSourceTokenNotConfigured.Wrap(fmt.Sprintf("failed to get price of token:%s from a nonexistent token from an existing source:%s", req.token, req.source)),
+						}
+					} else {
+						req.result <- &getLatestPriceRes{
+							price: price.Get(),
+							err:   nil,
+						}
 					}
 				}
 			case <-f.stop:
 				f.locker.Lock()
-				// close all sources
 				for _, source := range f.sources {
 					source.Stop()
 				}
 				f.running = false
 				f.locker.Unlock()
-				// TODO: stop all running sources
 				return
 			}
 		}

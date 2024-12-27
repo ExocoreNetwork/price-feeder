@@ -162,18 +162,17 @@ func (f *feeder) start() {
 				}
 				baseBlock, roundID, delta, active := f.calculateRound(h.commitHeight)
 				if !active {
-					//					f.logger.Info("didn't submit price for feeder due the the feeder expired", "height", h.commitHeight, "endBlock", f.endBlock)
 					break
 				}
 				if delta < 3 {
 					f.logger.Info("trigger feeder", "height_commith", h.commitHeight, "height_price", h.priceHeight)
 					if price, err := f.fetcher.GetLatestPrice(f.source, f.token); err != nil {
 						f.logger.Error("failed to get latest price", "roundID", roundID, "delta", delta, "feeder", f.Info(), "error", err)
-						if errors.Is(err, feedertypes.ErrSrouceTokenNotConfigured) {
+						if errors.Is(err, feedertypes.ErrSourceTokenNotConfigured) {
 							f.logger.Error("add token from configure of source", "token", f.token, "source", f.source)
 							// blocked this feeder since no available fetcher_source_price working
 							if added := f.fetcher.AddTokenForSource(f.source, f.token); !added {
-								f.logger.Error("failed to add token from configure, pleas update the config file of source", "token", f.token, "source", f.source)
+								f.logger.Error("failed to complete adding token from configure, pleas check and update the config file of source if necessary", "token", f.token, "source", f.source)
 							}
 						}
 					} else {

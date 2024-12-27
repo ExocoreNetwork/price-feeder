@@ -49,12 +49,12 @@ func (p *proxy) addToken(tokens map[string]string) error {
 	for token, address := range tokens {
 		addrParsed := strings.Split(strings.TrimSpace(address), "_")
 		if ok := isContractAddress(addrParsed[0], p.clients[addrParsed[1]]); !ok {
-			return fmt.Errorf("address %s is not a contract address on chain:%s\n", addrParsed[0], addrParsed[1])
+			return fmt.Errorf("invalid contract: address=%s chain=%s", addrParsed[0], addrParsed[1])
 		}
 		var err error
 		if p.aggregators[strings.ToLower(token)], err = aggregatorv3.NewAggregatorV3Interface(common.HexToAddress(addrParsed[0]), p.clients[addrParsed[1]]); err != nil {
-			return fmt.Errorf("failed to newAggregator from address:%s on chain:%s of chainlink, error:%w", common.HexToAddress(addrParsed[0]), addrParsed[1], err)
-			return err
+			return fmt.Errorf("failed to create aggregator: address=%s chain=%s error=%w",
+				common.HexToAddress(addrParsed[0]), addrParsed[1], err)
 		}
 	}
 	return nil
