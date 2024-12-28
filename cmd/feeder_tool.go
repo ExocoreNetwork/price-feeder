@@ -27,6 +27,11 @@ var DefaultRetryConfig = RetryConfig{
 	Interval:    2 * time.Second,
 }
 
+var DebugRetryConfig = RetryConfig{
+	MaxAttempts: 10,
+	Interval:    3 * time.Second,
+}
+
 const (
 	statusOk = 0
 	privFile = "priv_validator_key.json"

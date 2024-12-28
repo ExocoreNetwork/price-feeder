@@ -10,6 +10,7 @@ import (
 	"cosmossdk.io/simapp/params"
 	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cosmos/cosmos-sdk/client"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/types/tx"
@@ -33,7 +34,8 @@ type exoClient struct {
 	chainID string
 
 	// client to broadcast transactions to eoxocred
-	txClient tx.ServiceClient
+	txClient      tx.ServiceClient
+	txClientDebug *rpchttp.HTTP
 
 	// wsclient interact with exocored
 	wsClient   *websocket.Conn
@@ -54,7 +56,7 @@ type exoClient struct {
 }
 
 // NewExoClient creates a exocore-client used to do queries and send transactions to exocored
-func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint string, privKey cryptotypes.PrivKey, encCfg params.EncodingConfig, chainID string) (*exoClient, error) {
+func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint, endpointDebug string, privKey cryptotypes.PrivKey, encCfg params.EncodingConfig, chainID string) (*exoClient, error) {
 	ec := &exoClient{
 		logger:           logger,
 		privKey:          privKey,
@@ -78,6 +80,14 @@ func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint string, pri
 
 	// setup txClient
 	ec.txClient = sdktx.NewServiceClient(ec.grpcConn)
+
+	if len(endpointDebug) > 0 {
+		ec.txClientDebug, err = client.NewClientFromNode(endpointDebug)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create new client for debug, endponit:%s, error:%v", endpointDebug, err)
+		}
+	}
+	// ec.txClient = sdktx.NewServiceClient(ec.grpcConn)
 	// setup queryClient
 	ec.oracleClient = oracletypes.NewQueryClient(ec.grpcConn)
 	// setup wsClient
@@ -99,7 +109,6 @@ func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint string, pri
 	ec.wsClient.SetPongHandler(func(string) error {
 		return nil
 	})
-
 	return ec, nil
 }
 

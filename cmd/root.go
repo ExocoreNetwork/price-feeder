@@ -54,7 +54,10 @@ func init() {
 
 	startCmd.Flags().StringVarP(&mnemonic, "mnemonic", "m", "", "mnemonic of consensus key")
 
-	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(
+		startCmd,
+		debugCmd,
+	)
 }
 
 // initConfig reads in config file and ENV variables if set.
