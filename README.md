@@ -19,10 +19,12 @@ This tool fetches token prices from off-chain sources such as `CEX` and `DEX`, t
 Or check out the latest release.
 
 # Quick Start
-
+## Start
 `pricefeeder --config path/to/config --sources path/to/sources/config start -m [mnemonic of validator's consensus key]`
 
-### eg. 
+This command starts a process that continuously fetches price information from sources. It monitors the height changes of exocorechain and sends price quote transactions to the exocore blockchain during quote windows, according to the oracle parameter settings.
+
+### Sample Config 
 #### config.yaml (path/to/config/config.yaml)
 ```
 tokens:
@@ -69,3 +71,15 @@ url:
 url:
   !!str 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_0x65
 ```
+## Debug
+We provide command-line tools for sending price quote transactions manually through an interactive interface
+### send tx immedidately
+`pricefeeder --config path/to/config debug send-imm --feederID [1] '{"base_block":160,"nonce":2,"price":"99907000000","det_id":"123","decimal":8,"timestamp":"2024-12-27 15:16:17"}'`
+### send tx on specified height
+`pricefeeder --config path/to/config debug`
+
+This will start a grpc service to monitor the heighs change of exocorchain, and serves the 'send create-price tx' request
+
+`pricefeeder --config path/to/config debug send --feederID [1] --height [160] '{"base_block":160,"nonce":2,"price":"99907000000","det_id":"123","decimal":8,"timestamp":"2024-12-27 15:16:17"}'`
+
+The command will send the request of 'sending a creat-price tx on specified height' to the grpc server started.
