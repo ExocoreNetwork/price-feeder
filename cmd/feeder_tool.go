@@ -27,25 +27,16 @@ var DefaultRetryConfig = RetryConfig{
 	Interval:    2 * time.Second,
 }
 
-const (
-	statusOk     = 0
-	privFile     = "priv_validator_key.json"
-	baseCurrency = "USDT"
-
-	//feeder_tokenName_feederID
-	loggerTagPrefix = "feed_%s_%d"
-)
-
 // var updateConfig sync.Mutex
 
 // RunPriceFeeder runs price feeder to fetching price and feed to exocorechain
-func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemonic string, sourcesPath string, standalone bool) {
+func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnemonic string, sourcesPath string, standalone bool) {
 	// init logger
 	if logger = feedertypes.SetLogger(logger); logger == nil {
 		panic("logger is not initialized")
 	}
 	// init logger, fetchers, exocoreclient
-	if err := initComponents(logger, conf, standalone); err != nil {
+	if err := initComponents(logger, conf, sourcesPath, standalone); err != nil {
 		logger.Error("failed to initialize components")
 		panic(err)
 	}
@@ -68,7 +59,7 @@ func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemo
 
 	ecClient.Subscribe()
 
-	fsMap := NewFeederMap()
+	feeders := NewFeeders(feedertypes.GetLogger("feeders"), f, ecClient)
 	// we don't check empty tokenfeeders list
 	maxNonce := oracleP.MaxNonce
 	for feederID, feeder := range oracleP.TokenFeeders {
@@ -83,9 +74,8 @@ func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemo
 				panic(fmt.Sprintf("source of nst:%s is not set", tokenName))
 			}
 		}
-		fsMap.Add(feeder, feederID, f, ecClient, source, tokenName, maxNonce, feedertypes.GetLogger(fmt.Sprintf(loggerTagPrefix, tokenName, feederID)))
+		feeders.SetupFeeder(feeder, feederID, source, tokenName, maxNonce)
 	}
-	feeders := fsMap.NewFeeders(logger)
 	feeders.Start()
 
 	for event := range ecClient.EventsCh() {
@@ -94,7 +84,7 @@ func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemo
 			if paramsUpdate := e.ParamsUpdate(); paramsUpdate {
 				oracleP, err = getOracleParamsWithMaxRetry(DefaultRetryConfig.MaxAttempts, ecClient, logger)
 				if err != nil {
-					fmt.Printf("Failed to get oracle params with maxRetry when params update detected, price-feeder will exit, error:%v", err)
+					logger.Error(fmt.Sprintf("Failed to get oracle params with maxRetry when params update detected, price-feeder will exit, error:%v", err))
 					return
 				}
 				feeders.UpdateOracleParams(oracleP)
@@ -164,7 +154,7 @@ func ResetAllStakerValidators(ec exoclient.ExoClientInf, logger feedertypes.Logg
 }
 
 // // initComponents, initialize fetcher, exoclient, it will panic if any initialization fialed
-func initComponents(logger types.LoggerInf, conf types.Config, standalone bool) error {
+func initComponents(logger types.LoggerInf, conf *types.Config, sourcesPath string, standalone bool) error {
 	count := 0
 	for count < DefaultRetryConfig.MaxAttempts {
 		count++
@@ -175,7 +165,7 @@ func initComponents(logger types.LoggerInf, conf types.Config, standalone bool) 
 		}
 
 		// init exoclient
-		err = exoclient.Init(conf, mnemonic, privFile, standalone)
+		err = exoclient.Init(conf, mnemonic, privFile, false, standalone)
 		if err != nil {
 			if errors.Is(err, feedertypes.ErrInitConnectionFail) {
 				logger.Info("retry initComponents due to connectionfailed", "count", count, "maxRetry", DefaultRetryConfig.MaxAttempts, "error", err)

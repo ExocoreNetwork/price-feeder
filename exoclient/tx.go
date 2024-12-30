@@ -11,49 +11,18 @@ import (
 
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
+	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 )
 
 // SendTx signs a create-price transaction and send it to exocored
-// func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price, roundID string, decimal int, nonce int32) (*sdktx.BroadcastTxResponse, error) {
 func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*sdktx.BroadcastTxResponse, error) {
-	// build create-price message
-	msg := oracletypes.NewMsgCreatePrice(
-		sdk.AccAddress(ec.pubKey.Address()).String(),
-		feederID,
-		[]*oracletypes.PriceSource{
-			{
-				SourceID: Chainlink,
-				Prices: []*oracletypes.PriceTimeDetID{
-					{
-						Price:     price.Price,
-						Decimal:   price.Decimal,
-						Timestamp: time.Now().UTC().Format(feedertypes.TimeLayout),
-						DetID:     price.RoundID,
-					},
-				},
-				Desc: "",
-			},
-		},
-		baseBlock,
-		nonce,
-	)
-
-	// sign the message with validator consensus-key configured
-	signedTx, err := ec.signMsg(msg)
+	msg, txBytes, err := ec.getSignedTxBytes(feederID, baseBlock, price, nonce)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign message, msg:%v, valConsAddr:%s, error:%w", msg, sdk.ConsAddress(ec.pubKey.Address()), err)
+		return nil, err
 	}
-
-	// encode transaction to broadcast
-	txBytes, err := ec.txCfg.TxEncoder()(signedTx)
-	if err != nil {
-		// this should not happen
-		return nil, fmt.Errorf("failed to encode singedTx, txBytes:%b, msg:%v, valConsAddr:%s, error:%w", txBytes, msg, sdk.ConsAddress(ec.pubKey.Address()), err)
-	}
-
 	// broadcast txBytes
 	res, err := ec.txClient.BroadcastTx(
 		context.Background(),
@@ -62,6 +31,19 @@ func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price fetchertypes
 			TxBytes: txBytes,
 		},
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to braodcast transaction, msg:%v, valConsAddr:%s, error:%w", msg, sdk.ConsAddress(ec.pubKey.Address()), err)
+	}
+	return res, nil
+}
+
+func (ec exoClient) SendTxDebug(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*coretypes.ResultBroadcastTxCommit, error) {
+	msg, txBytes, err := ec.getSignedTxBytes(feederID, baseBlock, price, nonce)
+	if err != nil {
+		return nil, err
+	}
+	// broadcast txBytes
+	res, err := ec.txClientDebug.BroadcastTxCommit(context.Background(), txBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to braodcast transaction, msg:%v, valConsAddr:%s, error:%w", msg, sdk.ConsAddress(ec.pubKey.Address()), err)
 	}
@@ -120,4 +102,42 @@ func (ec exoClient) getSignature(sigBytes []byte) signing.SignatureV2 {
 		},
 	}
 	return signature
+}
+
+func (ec exoClient) getSignedTxBytes(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*oracletypes.MsgCreatePrice, []byte, error) {
+	// build create-price message
+	msg := oracletypes.NewMsgCreatePrice(
+		sdk.AccAddress(ec.pubKey.Address()).String(),
+		feederID,
+		[]*oracletypes.PriceSource{
+			{
+				SourceID: Chainlink,
+				Prices: []*oracletypes.PriceTimeDetID{
+					{
+						Price:     price.Price,
+						Decimal:   price.Decimal,
+						Timestamp: time.Now().UTC().Format(feedertypes.TimeLayout),
+						DetID:     price.RoundID,
+					},
+				},
+				Desc: "",
+			},
+		},
+		baseBlock,
+		nonce,
+	)
+
+	// sign the message with validator consensus-key configured
+	signedTx, err := ec.signMsg(msg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to sign message, msg:%v, valConsAddr:%s, error:%w", msg, sdk.ConsAddress(ec.pubKey.Address()), err)
+	}
+
+	// encode transaction to broadcast
+	txBytes, err := ec.txCfg.TxEncoder()(signedTx)
+	if err != nil {
+		// this should not happen
+		return nil, nil, fmt.Errorf("failed to encode singedTx, txBytes:%b, msg:%v, valConsAddr:%s, error:%w", txBytes, msg, sdk.ConsAddress(ec.pubKey.Address()), err)
+	}
+	return msg, txBytes, nil
 }
