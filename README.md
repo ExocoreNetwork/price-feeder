@@ -25,20 +25,24 @@ Or check out the latest release.
 ### eg. 
 #### config.yaml (path/to/config/config.yaml)
 ```
-sources:
-  - chainlink
 tokens:
-  - ETHUSDT
+  - token: ETHUSDT
+    sources: chainlink
+  - token: NSTETH
+    sources: beaconchain
+  - token: TESTTOKEN
+    sources: source1, source2, source3
 sender:
   mnemonic: "wonder myself quality resource ketchup occur stadium shove vicious situate plug second soccer monkey harbor output vanish then primary feed earth story real like"
   path: /Users/xx/.tmp-exocored/config
 exocore:
   chainid: exocoretestnet_233-1
   appName: exocore
-  rpc: 127.0.0.1:9090
-  ws:
-    addr: !!str ws://127.0.0.1:26657
-    endpoint: /websocket
+  grpc: 127.0.0.1:9090
+  ws: addr: !!str ws://127.0.0.1:26657/websocket
+  rpc: !!str http://127.0.0.1:26657
+debugger:
+  grpc: !!str :50051
 ```
 For mnemonic used by validator to sign transactions (which should be ed25519 private-key corresponding to validator's consensus key), the priority is:
 1. cli: --mnemonic flag
