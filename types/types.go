@@ -49,7 +49,7 @@ type Config struct {
 		AppName string `mapstructure:"appname"`
 		Gprc    string `mapstructure:"grpc"`
 		Ws      string `mapstructure:"ws"`
-		Rpc     string `mspstructure:"rpc"`
+		Rpc     string `mapstructure:"rpc"`
 	} `mapstructure:"exocore"`
 }
 

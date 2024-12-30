@@ -198,7 +198,7 @@ func sendTx(feederID uint64, height int64, price *debugger.PriceMsg) (*debugger.
 	})
 }
 
-func sendTxImmediatly(feederID uint64, price *PriceJSON) (*debugger.SubmitPriceResponse, error) {
+func sendTxImmediately(feederID uint64, price *PriceJSON) (*debugger.SubmitPriceResponse, error) {
 	if err := exoclient.Init(feederConfig, mnemonic, privFile, true, true); err != nil {
 		return nil, fmt.Errorf("failed to init exoclient in txOnly mode for debug, error:%w", err)
 	}
