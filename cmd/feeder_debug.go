@@ -15,6 +15,41 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+type sendReq struct {
+	// on which block committed send this transaction, required
+	height int64
+
+	feederID uint64
+	price    *debugger.PriceMsg
+	result   chan *debugger.SubmitPriceResponse
+}
+type pendingRequestManager map[int64][]*sendReq
+
+func newPendingRequestManager() pendingRequestManager {
+	return make(map[int64][]*sendReq)
+}
+
+func (p pendingRequestManager) add(height int64, req *sendReq) {
+	if pendings, ok := p[height]; ok {
+		p[height] = append(pendings, req)
+	} else {
+		p[height] = []*sendReq{req}
+	}
+}
+
+func (p pendingRequestManager) process(height int64, handler func(*sendReq) error) {
+	for h, pendings := range p {
+		if h <= height {
+			for _, req := range pendings {
+				if err := handler(req); err != nil {
+					req.result <- &debugger.SubmitPriceResponse{Err: err.Error()}
+				}
+			}
+			delete(p, h)
+		}
+	}
+}
+
 type server struct {
 	sendCh chan *sendReq
 	debugger.UnimplementedPriceSubmitServiceServer
@@ -47,6 +82,19 @@ type PriceJSON struct {
 	BaseBlock uint64 `json:"base_block"`
 }
 
+func (p PriceJSON) validate() error {
+	if len(p.Price) == 0 {
+		return errors.New("price is required")
+	}
+	if len(p.DetID) == 0 {
+		return errors.New("det_id is required")
+	}
+	if p.Nonce == 0 {
+		return errors.New("nonce should be greater than 0")
+	}
+	return nil
+}
+
 func (p PriceJSON) getPriceInfo() fetchertypes.PriceInfo {
 	return fetchertypes.PriceInfo{
 		Price:     p.Price,
@@ -56,35 +104,7 @@ func (p PriceJSON) getPriceInfo() fetchertypes.PriceInfo {
 	}
 }
 
-type sendRes struct {
-	err              error
-	checkTxSuccess   bool
-	checkTxLog       string
-	deliverTxSuccess bool
-	deliverTxLog     string
-	txHash           string
-	height           int64
-}
-
-type sendReq struct {
-	// on which block committed send this transaction, required
-	height int64
-
-	feederID uint64
-	price    *debugger.PriceMsg
-	result   chan *debugger.SubmitPriceResponse
-}
-
-type statusCode string
-
-const (
-	overwrite statusCode = "overwrite the pending transaction"
-	success   statusCode = "successfully sent the transaction"
-	fail      statusCode = "failed to send transaction"
-)
-
 var (
-	sendCh           = make(chan *sendReq)
 	DebugRetryConfig = RetryConfig{
 		MaxAttempts: 10,
 		Interval:    3 * time.Second,
@@ -124,7 +144,8 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 	defer ecClient.Close()
 	ecClient.Subscribe()
 	//	var pendingReq *sendReq
-	pendingReqs := make(map[int64][]*sendReq)
+	//	pendingReqs := make(map[int64][]*sendReq)
+	pendingReqs := newPendingRequestManager()
 	sendCh := make(chan *sendReq, 10)
 	go func() {
 		for {
@@ -132,38 +153,27 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 			case event := <-ecClient.EventsCh():
 				if e, ok := event.(*exoclient.EventNewBlock); ok {
 					logger.Info("new block commited", "height", e.Height())
-					for h, pendings := range pendingReqs {
-						if h <= e.Height() {
-							for i, req := range pendings {
-								res, err := ecClient.SendTxDebug(req.feederID, req.price.BaseBlock, req.price.GetPriceInfo(), req.price.Nonce)
-								if err != nil {
-									logger.Error("failed to send tx", "error", err)
-									req.result <- &debugger.SubmitPriceResponse{Err: err.Error()}
-								}
-								req.result <- &debugger.SubmitPriceResponse{
-									CheckTxSuccess:   res.CheckTx.Code == 0,
-									CheckTxLog:       res.CheckTx.Log,
-									DeliverTxSuccess: res.CheckTx.Code == 0 && res.DeliverTx.Code == 0,
-									DeliverTxLog:     res.DeliverTx.Log,
-									TxHash:           res.Hash.String(),
-									Height:           res.Height,
-								}
-								if i == len(pendings)-1 {
-									delete(pendingReqs, h)
-								} else {
-									pendingReqs[h] = append(pendings[:i], pendings[i+1:]...)
-								}
-							}
+
+					pendingReqs.process(e.Height(), func(req *sendReq) error {
+						res, err := ecClient.SendTxDebug(req.feederID, req.price.BaseBlock, req.price.GetPriceInfo(), req.price.Nonce)
+						if err != nil {
+							logger.Error("failed to send tx", "error", err)
+							return err
 						}
-					}
+						req.result <- &debugger.SubmitPriceResponse{
+							CheckTxSuccess:   res.CheckTx.Code == 0,
+							CheckTxLog:       res.CheckTx.Log,
+							DeliverTxSuccess: res.CheckTx.Code == 0 && res.DeliverTx.Code == 0,
+							DeliverTxLog:     res.DeliverTx.Log,
+							TxHash:           res.Hash.String(),
+							Height:           res.Height,
+						}
+						return nil
+					})
 				}
 			case req := <-sendCh:
 				logger.Info("add a new send request", "height", req.height)
-				if pendings, ok := pendingReqs[req.height]; ok {
-					pendingReqs[req.height] = append(pendings, req)
-				} else {
-					pendingReqs[req.height] = []*sendReq{req}
-				}
+				pendingReqs.add(req.height, req)
 			}
 		}
 	}()

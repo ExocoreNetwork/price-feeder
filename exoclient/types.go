@@ -415,7 +415,7 @@ func Init(conf *feedertypes.Config, mnemonic, privFile string, txOnly bool, stan
 	}
 
 	var err error
-	if defaultExoClient, err = NewExoClient(logger, confExocore.Gprc, confExocore.Ws, conf.Exocore.Rpc, privKey, encCfg, confExocore.ChainID, txOnly); err != nil {
+	if defaultExoClient, err = NewExoClient(logger, confExocore.Grpc, confExocore.Ws, conf.Exocore.Rpc, privKey, encCfg, confExocore.ChainID, txOnly); err != nil {
 		if errors.Is(err, feedertypes.ErrInitConnectionFail) {
 			return err
 		}

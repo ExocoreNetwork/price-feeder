@@ -47,7 +47,7 @@ type Config struct {
 	Exocore struct {
 		ChainID string `mapstructure:"chainid"`
 		AppName string `mapstructure:"appname"`
-		Gprc    string `mapstructure:"grpc"`
+		Grpc    string `mapstructure:"grpc"`
 		Ws      string `mapstructure:"ws"`
 		Rpc     string `mapstructure:"rpc"`
 	} `mapstructure:"exocore"`

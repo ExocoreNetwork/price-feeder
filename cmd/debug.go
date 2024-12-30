@@ -84,7 +84,10 @@ var debugSendImmCmd = &cobra.Command{
 		if err := json.Unmarshal([]byte(msgStr), msgPrice); err != nil {
 			return err
 		}
-		res, err := sendTxImmediatly(feederID, msgPrice)
+		if err := msgPrice.validate(); err != nil {
+			return err
+		}
+		res, err := sendTxImmediately(feederID, msgPrice)
 		if err != nil {
 			return err
 		}
