@@ -27,24 +27,16 @@ var DefaultRetryConfig = RetryConfig{
 	Interval:    2 * time.Second,
 }
 
-const (
-	statusOk = 0
-	privFile = "priv_validator_key.json"
-
-	//feeder_tokenName_feederID
-	// loggerTagPrefix = "feed_%s_%d"
-)
-
 // var updateConfig sync.Mutex
 
 // RunPriceFeeder runs price feeder to fetching price and feed to exocorechain
-func RunPriceFeeder(conf feedertypes.Config, logger feedertypes.LoggerInf, mnemonic string, sourcesPath string, standalone bool) {
+func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnemonic string, sourcesPath string, standalone bool) {
 	// init logger
 	if logger = feedertypes.SetLogger(logger); logger == nil {
 		panic("logger is not initialized")
 	}
 	// init logger, fetchers, exocoreclient
-	if err := initComponents(logger, conf, standalone); err != nil {
+	if err := initComponents(logger, conf, sourcesPath, standalone); err != nil {
 		logger.Error("failed to initialize components")
 		panic(err)
 	}
@@ -162,7 +154,7 @@ func ResetAllStakerValidators(ec exoclient.ExoClientInf, logger feedertypes.Logg
 }
 
 // // initComponents, initialize fetcher, exoclient, it will panic if any initialization fialed
-func initComponents(logger types.LoggerInf, conf types.Config, standalone bool) error {
+func initComponents(logger types.LoggerInf, conf *types.Config, sourcesPath string, standalone bool) error {
 	count := 0
 	for count < DefaultRetryConfig.MaxAttempts {
 		count++
@@ -173,7 +165,7 @@ func initComponents(logger types.LoggerInf, conf types.Config, standalone bool) 
 		}
 
 		// init exoclient
-		err = exoclient.Init(conf, mnemonic, privFile, standalone)
+		err = exoclient.Init(conf, mnemonic, privFile, false, standalone)
 		if err != nil {
 			if errors.Is(err, feedertypes.ErrInitConnectionFail) {
 				logger.Info("retry initComponents due to connectionfailed", "count", count, "maxRetry", DefaultRetryConfig.MaxAttempts, "error", err)
