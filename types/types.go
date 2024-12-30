@@ -51,6 +51,9 @@ type Config struct {
 		Ws      string `mapstructure:"ws"`
 		Rpc     string `mapstructure:"rpc"`
 	} `mapstructure:"exocore"`
+	Debugger struct {
+		Grpc string `mapstructure:"grpc"`
+	} `mapstructure:"debugger"`
 }
 
 type LoggerInf log.Logger

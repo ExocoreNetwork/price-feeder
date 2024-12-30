@@ -177,7 +177,7 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 			}
 		}
 	}()
-	lis, err := net.Listen("tcp", ":50051")
+	lis, err := net.Listen("tcp", conf.Debugger.Grpc)
 	if err != nil {
 		fmt.Printf("failed to listen: %v\r\n", err)
 		return
@@ -190,9 +190,10 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 	}
 }
 
-func sendTx(feederID uint64, height int64, price *debugger.PriceMsg) (*debugger.SubmitPriceResponse, error) {
+func sendTx(feederID uint64, height int64, price *debugger.PriceMsg, port string) (*debugger.SubmitPriceResponse, error) {
 	conn, err := grpc.Dial(
-		"localhost:50051",
+		fmt.Sprintf("localhost%s", port),
+		//		"localhost:50051",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)

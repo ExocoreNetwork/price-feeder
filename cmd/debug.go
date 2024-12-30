@@ -57,7 +57,7 @@ var debugSendCmd = &cobra.Command{
 		if err := json.Unmarshal([]byte(msgStr), msgPrice); err != nil {
 			return err
 		}
-		res, err := sendTx(feederID, height, msgPrice)
+		res, err := sendTx(feederID, height, msgPrice, feederConfig.Debugger.Grpc)
 		if err != nil {
 			return err
 		}
