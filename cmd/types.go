@@ -13,7 +13,10 @@ import (
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 )
 
-const loggerTagPrefix = "feed_%s_%d"
+const (
+	loggerTagPrefix = "feed_%s_%d"
+	statusOk        = 0
+)
 
 type priceFetcher interface {
 	GetLatestPrice(source, token string) (fetchertypes.PriceInfo, error)

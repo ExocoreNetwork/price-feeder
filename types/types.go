@@ -1,6 +1,7 @@
 package types
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -150,9 +151,7 @@ func (e *Err) Unwrap() error {
 }
 
 var (
-	ConfigFile        string
-	SourcesConfigPath string
-	v                 *viper.Viper
+	v *viper.Viper
 
 	ErrInitFail                 = NewErr("failed to initialization")
 	ErrInitConnectionFail       = NewErr("failed to establish a connection")
@@ -161,7 +160,13 @@ var (
 )
 
 // InitConfig will only read path cfgFile once, and for reload after InitConfig, should use ReloadConfig
-func InitConfig(cfgFile string) Config {
+func InitConfig(cfgFile string) (*Config, error) {
+	if len(cfgFile) == 0 {
+		return nil, errors.New("empty file name")
+	}
+	if _, err := os.Stat(cfgFile); os.IsNotExist(err) {
+		return nil, err
+	}
 	if v == nil {
 		v = viper.New()
 	}
@@ -176,7 +181,7 @@ func InitConfig(cfgFile string) Config {
 	if err := v.Unmarshal(conf); err != nil {
 		panic(ErrInitFail.Wrap(err.Error()))
 	}
-	return *conf
+	return conf, nil
 }
 
 // ReloadConfig will reload config file with path set by InitConfig

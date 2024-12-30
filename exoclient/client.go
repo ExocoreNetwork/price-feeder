@@ -1,6 +1,7 @@
 package exoclient
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -56,7 +57,7 @@ type exoClient struct {
 }
 
 // NewExoClient creates a exocore-client used to do queries and send transactions to exocored
-func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint, endpointDebug string, privKey cryptotypes.PrivKey, encCfg params.EncodingConfig, chainID string) (*exoClient, error) {
+func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint, endpointDebug string, privKey cryptotypes.PrivKey, encCfg params.EncodingConfig, chainID string, txOnly bool) (*exoClient, error) {
 	ec := &exoClient{
 		logger:           logger,
 		privKey:          privKey,
@@ -72,43 +73,47 @@ func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint, endpointDe
 	}
 
 	var err error
-	ec.logger.Info("establish grpc connection")
-	ec.grpcConn, err = createGrpcConn(endpoint, encCfg)
-	if err != nil {
-		return nil, feedertypes.ErrInitConnectionFail.Wrap(fmt.Sprintf("failed to create new Exoclient, endpoint:%s, error:%v", endpoint, err))
+	if txOnly && len(endpointDebug) == 0 {
+		return nil, errors.New("rpc endpoint is empty under debug mode")
 	}
-
-	// setup txClient
-	ec.txClient = sdktx.NewServiceClient(ec.grpcConn)
-
 	if len(endpointDebug) > 0 {
 		ec.txClientDebug, err = client.NewClientFromNode(endpointDebug)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create new client for debug, endponit:%s, error:%v", endpointDebug, err)
 		}
 	}
-	// ec.txClient = sdktx.NewServiceClient(ec.grpcConn)
-	// setup queryClient
-	ec.oracleClient = oracletypes.NewQueryClient(ec.grpcConn)
-	// setup wsClient
-	u, err := url.Parse(wsEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse wsEndpoint, wsEndpoint:%s, error:%w", wsEndpoint, err)
+	// grpc connection, websocket is not needed for txOnly mode when do debug
+	if !txOnly {
+		ec.logger.Info("establish grpc connection")
+		ec.grpcConn, err = createGrpcConn(endpoint, encCfg)
+		if err != nil {
+			return nil, feedertypes.ErrInitConnectionFail.Wrap(fmt.Sprintf("failed to create new Exoclient, endpoint:%s, error:%v", endpoint, err))
+		}
+
+		// setup txClient
+		ec.txClient = sdktx.NewServiceClient(ec.grpcConn)
+		// setup queryClient
+		ec.oracleClient = oracletypes.NewQueryClient(ec.grpcConn)
+		// setup wsClient
+		u, err := url.Parse(wsEndpoint)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse wsEndpoint, wsEndpoint:%s, error:%w", wsEndpoint, err)
+		}
+		ec.wsDialer = &websocket.Dialer{
+			NetDial: func(_, _ string) (net.Conn, error) {
+				return net.Dial("tcp", u.Host)
+			},
+			Proxy: http.ProxyFromEnvironment,
+		}
+		ec.logger.Info("establish ws connection")
+		ec.wsClient, _, err = ec.wsDialer.Dial(wsEndpoint, http.Header{})
+		if err != nil {
+			return nil, feedertypes.ErrInitConnectionFail.Wrap(fmt.Sprintf("failed to create ws connection, error:%v", err))
+		}
+		ec.wsClient.SetPongHandler(func(string) error {
+			return nil
+		})
 	}
-	ec.wsDialer = &websocket.Dialer{
-		NetDial: func(_, _ string) (net.Conn, error) {
-			return net.Dial("tcp", u.Host)
-		},
-		Proxy: http.ProxyFromEnvironment,
-	}
-	ec.logger.Info("establish ws connection")
-	ec.wsClient, _, err = ec.wsDialer.Dial(wsEndpoint, http.Header{})
-	if err != nil {
-		return nil, feedertypes.ErrInitConnectionFail.Wrap(fmt.Sprintf("failed to create ws connection, error:%v", err))
-	}
-	ec.wsClient.SetPongHandler(func(string) error {
-		return nil
-	})
 	return ec, nil
 }
 

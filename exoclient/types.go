@@ -356,7 +356,7 @@ var (
 
 // Init intialize the exoclient with configuration including consensuskey info, chainID
 // func Init(conf feedertypes.Config, mnemonic, privFile string, standalone bool) (*grpc.ClientConn, func(), error) {
-func Init(conf feedertypes.Config, mnemonic, privFile string, standalone bool) error {
+func Init(conf *feedertypes.Config, mnemonic, privFile string, txOnly bool, standalone bool) error {
 	if logger = feedertypes.GetLogger("exoclient"); logger == nil {
 		panic("logger is not initialized")
 	}
@@ -415,7 +415,7 @@ func Init(conf feedertypes.Config, mnemonic, privFile string, standalone bool) e
 	}
 
 	var err error
-	if defaultExoClient, err = NewExoClient(logger, confExocore.Gprc, confExocore.Ws, conf.Exocore.Rpc, privKey, encCfg, confExocore.ChainID); err != nil {
+	if defaultExoClient, err = NewExoClient(logger, confExocore.Gprc, confExocore.Ws, conf.Exocore.Rpc, privKey, encCfg, confExocore.ChainID, txOnly); err != nil {
 		if errors.Is(err, feedertypes.ErrInitConnectionFail) {
 			return err
 		}

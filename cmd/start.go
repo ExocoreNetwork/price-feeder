@@ -9,10 +9,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var (
-	mnemonic string
-	conf     feedertypes.Config
-)
+const privFile = "priv_validator_key.json"
+
+var mnemonic string
 
 // startCmd represents the start command
 var startCmd = &cobra.Command{
@@ -24,12 +23,10 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	//	PreRun: func(cmd *cobra.Command, args []string) {
-	//
-	//	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		logger := feedertypes.NewLogger(zapcore.InfoLevel)
 		// start fetcher to get prices from chainlink
-		RunPriceFeeder(conf, logger, mnemonic, sourcesPath, true)
+		RunPriceFeeder(feederConfig, logger, mnemonic, sourcesPath, true)
+		return nil
 	},
 }

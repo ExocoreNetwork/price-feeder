@@ -5,15 +5,16 @@ package cmd
 
 import (
 	"os"
-	"path"
 
-	"github.com/ExocoreNetwork/price-feeder/types"
+	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/spf13/cobra"
 )
 
-var cfgFile string
-
-var sourcesPath string
+var (
+	cfgFile      string
+	sourcesPath  string
+	feederConfig *feedertypes.Config
+)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -28,6 +29,12 @@ to quickly create a Cobra application.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// load and parse config file
+		var err error
+		feederConfig, err = feedertypes.InitConfig(cfgFile)
+		return err
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -40,7 +47,7 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	//	cobra.OnInitialize(initConfig)
 
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
@@ -56,21 +63,6 @@ func init() {
 
 	rootCmd.AddCommand(
 		startCmd,
-		debugCmd,
+		debugStartCmd,
 	)
-}
-
-// initConfig reads in config file and ENV variables if set.
-func initConfig() {
-	if len(cfgFile) == 0 {
-		// Find home directory.
-		home, err := os.UserHomeDir()
-		cobra.CheckErr(err)
-
-		cfgFile = path.Join(home, ".price-feeder")
-
-	}
-
-	types.ConfigFile = cfgFile
-	conf = types.InitConfig(cfgFile)
 }
