@@ -105,14 +105,6 @@ func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint, endpointDe
 			},
 			Proxy: http.ProxyFromEnvironment,
 		}
-		ec.logger.Info("establish ws connection")
-		ec.wsClient, _, err = ec.wsDialer.Dial(wsEndpoint, http.Header{})
-		if err != nil {
-			return nil, feedertypes.ErrInitConnectionFail.Wrap(fmt.Sprintf("failed to create ws connection, error:%v", err))
-		}
-		ec.wsClient.SetPongHandler(func(string) error {
-			return nil
-		})
 	}
 	return ec, nil
 }

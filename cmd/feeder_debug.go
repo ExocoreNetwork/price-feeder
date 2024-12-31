@@ -106,8 +106,8 @@ func (p PriceJSON) getPriceInfo() fetchertypes.PriceInfo {
 
 var (
 	DebugRetryConfig = RetryConfig{
-		MaxAttempts: 10,
-		Interval:    3 * time.Second,
+		MaxAttempts: 43200,
+		Interval:    2 * time.Second,
 	}
 )
 
@@ -134,7 +134,7 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 	}
 	ec, _ := exoclient.GetClient()
 
-	_, err := getOracleParamsWithMaxRetry(1, ec, logger)
+	_, err := getOracleParamsWithMaxRetry(DebugRetryConfig.MaxAttempts, ec, logger)
 	if err != nil {
 		logger.Error("failed to get oracle params", "error", err)
 		return
