@@ -37,19 +37,6 @@ func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price fetchertypes
 	return res, nil
 }
 
-func (ec exoClient) SendTxDebug(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*coretypes.ResultBroadcastTxCommit, error) {
-	msg, txBytes, err := ec.getSignedTxBytes(feederID, baseBlock, price, nonce)
-	if err != nil {
-		return nil, err
-	}
-	// broadcast txBytes
-	res, err := ec.txClientDebug.BroadcastTxCommit(context.Background(), txBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to braodcast transaction, msg:%v, valConsAddr:%s, error:%w", msg, sdk.ConsAddress(ec.pubKey.Address()), err)
-	}
-	return res, nil
-}
-
 // signMsg signs the message with consensusskey
 func (ec exoClient) signMsg(msgs ...sdk.Msg) (authsigning.Tx, error) {
 	txBuilder := ec.txCfg.NewTxBuilder()
@@ -140,4 +127,30 @@ func (ec exoClient) getSignedTxBytes(feederID uint64, baseBlock uint64, price fe
 		return nil, nil, fmt.Errorf("failed to encode singedTx, txBytes:%b, msg:%v, valConsAddr:%s, error:%w", txBytes, msg, sdk.ConsAddress(ec.pubKey.Address()), err)
 	}
 	return msg, txBytes, nil
+}
+
+func (ec exoClient) SendTxDebug(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*coretypes.ResultBroadcastTxCommit, error) {
+	msg, txBytes, err := ec.getSignedTxBytes(feederID, baseBlock, price, nonce)
+	if err != nil {
+		return nil, err
+	}
+	// broadcast txBytes
+	res, err := ec.txClientDebug.BroadcastTxCommit(context.Background(), txBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to braodcast transaction, msg:%v, valConsAddr:%s, error:%w", msg, sdk.ConsAddress(ec.pubKey.Address()), err)
+	}
+	return res, nil
+}
+
+func (ec exoClient) GetSignedTxBytesDebug(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*oracletypes.MsgCreatePrice, []byte, error) {
+	return ec.getSignedTxBytes(feederID, baseBlock, price, nonce)
+}
+
+func (ec exoClient) SendSignedTxBytesDebug(txBytes []byte) (*coretypes.ResultBroadcastTxCommit, error) {
+	// broadcast txBytes
+	res, err := ec.txClientDebug.BroadcastTxCommit(context.Background(), txBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to braodcast transaction, txBytes:%v, valConsAddr:%s, error:%w", txBytes, sdk.ConsAddress(ec.pubKey.Address()), err)
+	}
+	return res, nil
 }
