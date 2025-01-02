@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/ExocoreNetwork/price-feeder/debugger"
@@ -23,28 +24,36 @@ type sendReq struct {
 	price    *debugger.PriceMsg
 	result   chan *debugger.SubmitPriceResponse
 }
-type pendingRequestManager map[int64][]*sendReq
+type sendBytesReq struct {
+	txBytes []byte
+	result  chan *debugger.SubmitPriceResponse
+}
+type pendingRequestManager map[int64][]*sendBytesReq
 
 func newPendingRequestManager() pendingRequestManager {
-	return make(map[int64][]*sendReq)
+	return make(map[int64][]*sendBytesReq)
 }
 
-func (p pendingRequestManager) add(height int64, req *sendReq) {
+func (p pendingRequestManager) add(height int64, req *sendBytesReq) {
 	if pendings, ok := p[height]; ok {
 		p[height] = append(pendings, req)
 	} else {
-		p[height] = []*sendReq{req}
+		p[height] = []*sendBytesReq{req}
 	}
 }
 
-func (p pendingRequestManager) process(height int64, handler func(*sendReq) error) {
+func (p pendingRequestManager) process(height int64, handler func(*sendBytesReq)) {
+	wg := sync.WaitGroup{}
 	for h, pendings := range p {
 		if h <= height {
 			for _, req := range pendings {
-				if err := handler(req); err != nil {
-					req.result <- &debugger.SubmitPriceResponse{Err: err.Error()}
-				}
+				wg.Add(1)
+				go func(req *sendBytesReq) {
+					handler(req)
+					wg.Done()
+				}(req)
 			}
+			wg.Wait()
 			delete(p, h)
 		}
 	}
@@ -143,8 +152,6 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 	ecClient, _ := exoclient.GetClient()
 	defer ecClient.Close()
 	ecClient.Subscribe()
-	//	var pendingReq *sendReq
-	//	pendingReqs := make(map[int64][]*sendReq)
 	pendingReqs := newPendingRequestManager()
 	sendCh := make(chan *sendReq, 10)
 	go func() {
@@ -154,11 +161,14 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 				if e, ok := event.(*exoclient.EventNewBlock); ok {
 					logger.Info("new block commited", "height", e.Height())
 
-					pendingReqs.process(e.Height(), func(req *sendReq) error {
-						res, err := ecClient.SendTxDebug(req.feederID, req.price.BaseBlock, req.price.GetPriceInfo(), req.price.Nonce)
+					pendingReqs.process(e.Height(), func(req *sendBytesReq) {
+						res, err := ecClient.SendSignedTxBytesDebug(req.txBytes)
 						if err != nil {
 							logger.Error("failed to send tx", "error", err)
-							return err
+							req.result <- &debugger.SubmitPriceResponse{
+								Err: err.Error(),
+							}
+							return
 						}
 						req.result <- &debugger.SubmitPriceResponse{
 							CheckTxSuccess:   res.CheckTx.Code == 0,
@@ -168,12 +178,21 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 							TxHash:           res.Hash.String(),
 							Height:           res.Height,
 						}
-						return nil
 					})
 				}
 			case req := <-sendCh:
-				logger.Info("add a new send request", "height", req.height)
-				pendingReqs.add(req.height, req)
+				logger.Info("add a new send request", "height", req.height, "feederID", req.feederID)
+				_, txBytes, err := ecClient.GetSignedTxBytesDebug(req.feederID, req.price.BaseBlock, req.price.GetPriceInfo(), req.price.Nonce)
+				if err != nil {
+					req.result <- &debugger.SubmitPriceResponse{
+						Err: fmt.Sprintf("failed to sign tx from req:%v", req),
+					}
+					break
+				}
+				pendingReqs.add(req.height, &sendBytesReq{
+					txBytes: txBytes,
+					result:  req.result,
+				})
 			}
 		}
 	}()
@@ -193,7 +212,6 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 func sendTx(feederID uint64, height int64, price *debugger.PriceMsg, port string) (*debugger.SubmitPriceResponse, error) {
 	conn, err := grpc.Dial(
 		fmt.Sprintf("localhost%s", port),
-		//		"localhost:50051",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
