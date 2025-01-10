@@ -86,10 +86,15 @@ func ResetStakerValidators(stakerInfos []*oracletypes.StakerInfo, all bool) erro
 	return defaultStakerValidators.reset(stakerInfos, all)
 }
 func UpdateStakerValidators(stakerIdx int, validatorIndexHex string, index uint64, deposit bool) bool {
-	if deposit {
-		return defaultStakerValidators.addVIdx(stakerIdx, validatorIndexHex, index)
+	validatorIndexInt, err := convertHexToIntStr(validatorIndexHex)
+	if err != nil {
+		logger.Error("failed to parse validatorIndexHex to intString")
+		return false
 	}
-	return defaultStakerValidators.removeVIdx(stakerIdx, validatorIndexHex, index)
+	if deposit {
+		return defaultStakerValidators.addVIdx(stakerIdx, validatorIndexInt, index)
+	}
+	return defaultStakerValidators.removeVIdx(stakerIdx, validatorIndexInt, index)
 }
 
 func (s *source) fetch(token string) (*types.PriceInfo, error) {
@@ -139,7 +144,6 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 			}
 		}
 
-		// validatorBalances, err := GetValidators(validatorIdxs, epoch)
 		validatorBalances, err := getValidators(vList.validators[i:], stateRoot)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get validators from beaconchain, error:%w", err)
@@ -148,12 +152,12 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 			// this should be initialized from exocored
 			stakerBalance += int(validatorBalance[1])
 		}
-		if delta := stakerBalance - defaultBalance*len(vList.validators); delta != 0 {
-			if delta < maxChange {
-				delta = maxChange
+		if delta := stakerBalance - defaultBalance*l; delta != 0 {
+			if delta < maxChange*l {
+				delta = maxChange * l
 			}
 			stakerChanges = append(stakerChanges, []int{stakerIdx, delta})
-			s.logger.Info("fetched efb from beaconchain", "staker_index", stakerIdx, "balance_change", delta)
+			s.logger.Info("fetched efb from beaconchain", "staker_index", stakerIdx, "balance_change", delta, "validators_count", l)
 			hasEFBChanged = true
 		}
 	}

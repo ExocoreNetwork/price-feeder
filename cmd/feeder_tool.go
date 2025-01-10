@@ -118,6 +118,8 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 					logger.Error("failed to reset all staker's validators for native-restaking-eth")
 					// TODO: should we just clear all info to prevent further nst update
 				}
+			} else {
+				logger.Info("updated Staker validator list for beaconchain fetcher", "stakerID", e.StakerID(), "validatorIndex", e.ValidatorIndex(), "deposit", e.Deposit(), "index", e.Index())
 			}
 		}
 	}
