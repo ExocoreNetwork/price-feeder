@@ -100,7 +100,7 @@ func UpdateStakerValidators(stakerIdx int, validatorIndexHex string, index uint6
 func (s *source) fetch(token string) (*types.PriceInfo, error) {
 	// check epoch, when epoch updated, update effective-balance
 	if types.NSTToken(token) != types.NativeTokenETH {
-		return nil, feedertypes.ErrTokenNotSupported.Wrap(fmt.Sprintf("only support native-eth-restaking %s", types.NativeTokenETH))
+		return nil, feedertypes.ErrTokenNotSupported.Wrap(fmt.Sprintf("only support native-eth-restaking %s, got:%s", types.NativeTokenETH, token))
 	}
 
 	stakerValidators := defaultStakerValidators.getStakerValidators()

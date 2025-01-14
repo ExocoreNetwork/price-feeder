@@ -400,7 +400,11 @@ func (fs *Feeders) Start() {
 							if source = fetchertypes.GetNSTSource(nstToken); len(source) == 0 {
 								fs.logger.Error("failed to add new feeder, source of nst token is not set", "token", tokenName)
 							}
+						} else if !strings.HasSuffix(tokenName, fetchertypes.BaseCurrency) {
+							// NOTE: this is for V1 only
+							tokenName += fetchertypes.BaseCurrency
 						}
+
 						feeder := newFeeder(tf, tfID, fs.fetcher, fs.submitter, source, tokenName, params.MaxNonce, fs.logger)
 						fs.feederMap[tfID] = feeder
 						feeder.start()

@@ -73,7 +73,11 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 			if source = fetchertypes.GetNSTSource(nstToken); len(source) == 0 {
 				panic(fmt.Sprintf("source of nst:%s is not set", tokenName))
 			}
+		} else if !strings.HasSuffix(tokenName, fetchertypes.BaseCurrency) {
+			// NOTE: this is for V1 only
+			tokenName += fetchertypes.BaseCurrency
 		}
+
 		feeders.SetupFeeder(feeder, feederID, source, tokenName, maxNonce)
 	}
 	feeders.Start()
