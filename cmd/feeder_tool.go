@@ -97,6 +97,7 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 			feeders.Trigger(e.Height(), e.FeederIDs())
 		case *exoclient.EventUpdatePrice:
 			finalPrices := make([]*finalPrice, 0, len(e.Prices()))
+			var syncPriceInfo string
 			for _, price := range e.Prices() {
 				feederIDList := oracleP.GetFeederIDsByTokenID(uint64(price.TokenID()))
 				l := len(feederIDList)
@@ -111,12 +112,14 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 					decimal:  price.Decimal(),
 					roundID:  price.RoundID(),
 				})
+				syncPriceInfo += fmt.Sprintf("feederID:%d, price:%s, decimal:%d, roundID:%s\n", feederID, price.Price(), price.Decimal(), price.RoundID())
 			}
+			logger.Info("sync local price from event", "prices", syncPriceInfo)
 			feeders.UpdatePrice(e.TxHeight(), finalPrices)
 		case *exoclient.EventUpdateNST:
 			// int conversion is safe
 			if updated := beaconchain.UpdateStakerValidators(int(e.StakerID()), e.ValidatorIndex(), uint64(e.Index()), e.Deposit()); !updated {
-				logger.Error("failed to update staker's validator list", "stakerID", e.StakerID(), "validatorIndex", e.ValidatorIndex, "deposit", e.Deposit(), "index", e.Index())
+				logger.Error("failed to update staker's validator list", "stakerID", e.StakerID(), "validatorIndex", e.ValidatorIndex(), "deposit", e.Deposit(), "index", e.Index())
 				// try to reset all validatorList
 				if err := ResetAllStakerValidators(ecClient, logger); err != nil {
 					logger.Error("failed to reset all staker's validators for native-restaking-eth")
