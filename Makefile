@@ -31,6 +31,6 @@ release:
 		release --clean --skip validate
 
 build:
-	go build -o ./build/price-feeder
+	go build -ldflags "-X github.com/ExocoreNetwork/price-feeder/version.Version=$(shell git describe --tags)" -o ./build/price-feeder
 
 .PHONY: build
