@@ -1,3 +1,3 @@
 package version
 
-var Name, Version, Commit string
+var Version string

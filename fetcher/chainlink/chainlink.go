@@ -16,11 +16,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-const baseCurrency = "usdt"
-
 func (s *source) fetch(token string) (*fetchertypes.PriceInfo, error) {
-	if !strings.HasSuffix(token, baseCurrency) {
-		token += baseCurrency
+	if !strings.HasSuffix(token, fetchertypes.BaseCurrency) {
+		token += fetchertypes.BaseCurrency
 	}
 	chainlinkPriceFeedProxy, ok := s.chainlinkProxy.get(token)
 	if !ok {

@@ -64,5 +64,6 @@ func init() {
 	rootCmd.AddCommand(
 		startCmd,
 		debugStartCmd,
+		versionCmd,
 	)
 }

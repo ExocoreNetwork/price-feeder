@@ -29,19 +29,19 @@ func (ec exoClient) GetLatestPrice(tokenID uint64) (oracleTypes.PriceTimeRound, 
 
 // TODO: pagination
 // GetStakerInfos get all stakerInfos for the assetID
-func (ec exoClient) GetStakerInfos(assetID string) ([]*oracleTypes.StakerInfo, error) {
+func (ec exoClient) GetStakerInfos(assetID string) ([]*oracleTypes.StakerInfo, int64, error) {
 	stakerInfoRes, err := ec.oracleClient.StakerInfos(context.Background(), &oracleTypes.QueryStakerInfosRequest{AssetId: assetID})
 	if err != nil {
-		return []*oracleTypes.StakerInfo{}, fmt.Errorf("failed to get stakerInfos from oracleClient, error:%w", err)
+		return []*oracleTypes.StakerInfo{}, 0, fmt.Errorf("failed to get stakerInfos from oracleClient, error:%w", err)
 	}
-	return stakerInfoRes.StakerInfos, nil
+	return stakerInfoRes.StakerInfos, stakerInfoRes.Version, nil
 }
 
 // GetStakerInfos get the stakerInfos corresponding to stakerAddr for the assetID
-func (ec exoClient) GetStakerInfo(assetID, stakerAddr string) ([]*oracleTypes.StakerInfo, error) {
+func (ec exoClient) GetStakerInfo(assetID, stakerAddr string) ([]*oracleTypes.StakerInfo, int64, error) {
 	stakerInfoRes, err := ec.oracleClient.StakerInfos(context.Background(), &oracleTypes.QueryStakerInfosRequest{AssetId: assetID})
 	if err != nil {
-		return []*oracleTypes.StakerInfo{}, fmt.Errorf("failed to get stakerInfo from oracleClient, error:%w", err)
+		return []*oracleTypes.StakerInfo{}, 0, fmt.Errorf("failed to get stakerInfo from oracleClient, error:%w", err)
 	}
-	return stakerInfoRes.StakerInfos, nil
+	return stakerInfoRes.StakerInfos, stakerInfoRes.Version, nil
 }

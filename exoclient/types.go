@@ -29,8 +29,8 @@ type ExoClientInf interface {
 	// Query
 	GetParams() (*oracletypes.Params, error)
 	GetLatestPrice(tokenID uint64) (oracletypes.PriceTimeRound, error)
-	GetStakerInfos(assetID string) ([]*oracleTypes.StakerInfo, error)
-	GetStakerInfo(assetID, stakerAddr string) ([]*oracleTypes.StakerInfo, error)
+	GetStakerInfos(assetID string) ([]*oracleTypes.StakerInfo, int64, error)
+	GetStakerInfo(assetID, stakerAddr string) ([]*oracleTypes.StakerInfo, int64, error)
 
 	// Tx
 	SendTx(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*sdktx.BroadcastTxResponse, error)
@@ -136,52 +136,85 @@ func (e *EventUpdatePrice) Type() EventType {
 	return EUpdatePrice
 }
 
+type EventUpdateNSTs []*EventUpdateNST
+
+func (e EventUpdateNSTs) Parse() (add, remove map[int64][]string, firstVersion, latestVersion int64) {
+	add = make(map[int64][]string)
+	remove = make(map[int64][]string)
+	for _, nst := range e {
+		if nst.deposit {
+			add[nst.stakerID] = append(add[nst.stakerID], nst.validatorIndex)
+		} else {
+			remove[nst.stakerID] = append(remove[nst.stakerID], nst.validatorIndex)
+		}
+		if firstVersion == 0 || nst.version < firstVersion {
+			firstVersion = nst.version
+		}
+		if nst.version > latestVersion {
+			latestVersion = nst.version
+		}
+	}
+	return
+}
+
 // EventUpdateNST tells the detail about the beaconchain-validator change for a staker
 type EventUpdateNST struct {
 	deposit        bool
 	stakerID       int64
 	validatorIndex string
-	index          int64
+	version        int64
 }
 
-func (s *SubscribeResult) GetEventUpdateNST() (*EventUpdateNST, error) {
-	nstChange, ok := s.NSTChange()
+func (s *SubscribeResult) GetEventUpdateNST() (EventUpdateNSTs, error) {
+	nstChanges, ok := s.NSTChanges()
 	if !ok {
 		return nil, errors.New("failed to get NativeTokenChange from event_txUpdateNST response")
 	}
-	parsed := strings.Split(nstChange, "_")
-	if len(parsed) != 4 {
-		return nil, fmt.Errorf("failed to parse nstChange: expected 4 parts but got %d, nstChange: %s", len(parsed), nstChange)
+	ret := make([]*EventUpdateNST, 0, len(nstChanges))
+	for _, nstChange := range nstChanges {
+		parsed := strings.Split(nstChange, "_")
+		if len(parsed) != 4 {
+			return nil, fmt.Errorf("failed to parse nstChange: expected 4 parts but got %d, nstChange: %s", len(parsed), nstChange)
+		}
+		deposit := parsed[0] == "deposit"
+		stakerID, err := strconv.ParseInt(parsed[1], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse stakerID in nstChange from evetn_txUpdateNST response, error:%w", err)
+		}
+		// TODO: group stakers to support more than 256 stakers
+		if stakerID > 256 {
+			return nil, fmt.Errorf("stakerID is too large, limit id 256, got:%d", stakerID)
+		}
+		index, err := strconv.ParseInt(parsed[3], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse beaconchain_sync_index in nstChange from event_txUpdateNST response, error:%w", err)
+		}
+		ret = append(ret, &EventUpdateNST{
+			deposit:        deposit,
+			stakerID:       stakerID,
+			validatorIndex: parsed[2],
+			version:        index,
+		})
 	}
-	deposit := parsed[0] == "deposit"
-	stakerID, err := strconv.ParseInt(parsed[1], 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse stakerID in nstChange from evetn_txUpdateNST response, error:%w", err)
-	}
-	index, err := strconv.ParseInt(parsed[3], 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse beaconchain_sync_index in nstChange from event_txUpdateNST response, error:%w", err)
-	}
-	return &EventUpdateNST{
-		deposit:        deposit,
-		stakerID:       stakerID,
-		validatorIndex: parsed[2],
-		index:          index,
-	}, nil
+	return ret, nil
 }
+
 func (e *EventUpdateNST) Deposit() bool {
 	return e.deposit
 }
+
 func (e *EventUpdateNST) StakerID() int64 {
 	return e.stakerID
 }
 func (e *EventUpdateNST) ValidatorIndex() string {
 	return e.validatorIndex
 }
-func (e *EventUpdateNST) Index() int64 {
-	return e.index
+
+func (e *EventUpdateNST) Version() int64 {
+	return e.version
 }
-func (e *EventUpdateNST) Type() EventType {
+
+func (e EventUpdateNSTs) Type() EventType {
 	return EUpdateNST
 }
 
@@ -316,11 +349,12 @@ func (s *SubscribeResult) FinalPrice() (prices []*FinalPrice, valid bool) {
 	return
 }
 
-func (s *SubscribeResult) NSTChange() (string, bool) {
-	if len(s.Result.Events.NativeTokenChange[0]) == 0 {
-		return "", false
+func (s *SubscribeResult) NSTChanges() (nstChanges []string, valid bool) {
+	if len(s.Result.Events.NativeTokenChange) > 0 {
+		nstChanges = s.Result.Events.NativeTokenChange
+		valid = true
 	}
-	return s.Result.Events.NativeTokenChange[0], true
+	return
 }
 
 func (s *SubscribeResult) ParamsUpdate() bool {

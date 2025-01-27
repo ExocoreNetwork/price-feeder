@@ -73,7 +73,11 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 			if source = fetchertypes.GetNSTSource(nstToken); len(source) == 0 {
 				panic(fmt.Sprintf("source of nst:%s is not set", tokenName))
 			}
+		} else if !strings.HasSuffix(tokenName, fetchertypes.BaseCurrency) {
+			// NOTE: this is for V1 only
+			tokenName += fetchertypes.BaseCurrency
 		}
+
 		feeders.SetupFeeder(feeder, feederID, source, tokenName, maxNonce)
 	}
 	feeders.Start()
@@ -93,6 +97,7 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 			feeders.Trigger(e.Height(), e.FeederIDs())
 		case *exoclient.EventUpdatePrice:
 			finalPrices := make([]*finalPrice, 0, len(e.Prices()))
+			var syncPriceInfo string
 			for _, price := range e.Prices() {
 				feederIDList := oracleP.GetFeederIDsByTokenID(uint64(price.TokenID()))
 				l := len(feederIDList)
@@ -107,19 +112,34 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 					decimal:  price.Decimal(),
 					roundID:  price.RoundID(),
 				})
+				syncPriceInfo += fmt.Sprintf("feederID:%d, price:%s, decimal:%d, roundID:%s\n", feederID, price.Price(), price.Decimal(), price.RoundID())
 			}
+			logger.Info("sync local price from event", "prices", syncPriceInfo)
 			feeders.UpdatePrice(e.TxHeight(), finalPrices)
-		case *exoclient.EventUpdateNST:
-			// int conversion is safe
-			if updated := beaconchain.UpdateStakerValidators(int(e.StakerID()), e.ValidatorIndex(), uint64(e.Index()), e.Deposit()); !updated {
-				logger.Error("failed to update staker's validator list", "stakerID", e.StakerID(), "validatorIndex", e.ValidatorIndex, "deposit", e.Deposit(), "index", e.Index())
+		case exoclient.EventUpdateNSTs:
+			addList, removeList, nextVersion, latestVersion := e.Parse()
+			// NOTE: for v1, beaconchain only:
+			var err error
+			addList, err = beaconchain.ConvertHexToIntStrForMap(addList)
+			if err != nil {
+				logger.Error("failed to convert hex to int for staker's validator list", "error", err)
+				break
+			}
+			removeList, err = beaconchain.ConvertHexToIntStrForMap(removeList)
+			if err != nil {
+				logger.Error("failed to convert hex to int for staker's validator list", "error", err)
+				break
+			}
+			if err := beaconchain.UpdateStakerValidators(addList, removeList, nextVersion, latestVersion); err != nil {
+				logger.Error("failed to update staker's validator list", "nextVersion", nextVersion, "latestVersion", latestVersion, "addList", addList, "removeList", removeList, "error", err)
 				// try to reset all validatorList
 				if err := ResetAllStakerValidators(ecClient, logger); err != nil {
-					logger.Error("failed to reset all staker's validators for native-restaking-eth")
-					// TODO: should we just clear all info to prevent further nst update
+					logger.Error("failed to reset all staker's validators for native-restaking-eth", "error", err)
+				} else {
+					logger.Info("reset all staker's validators for native-restaking-eth")
 				}
 			} else {
-				logger.Info("updated Staker validator list for beaconchain fetcher", "stakerID", e.StakerID(), "validatorIndex", e.ValidatorIndex(), "deposit", e.Deposit(), "index", e.Index())
+				logger.Info("updated Staker validator list for beaconchain fetcher", "stakerID", addList, "nextVersion", nextVersion, "latestVersion", latestVersion)
 			}
 		}
 	}
@@ -143,12 +163,12 @@ func getOracleParamsWithMaxRetry(maxRetry int, ecClient exoclient.ExoClientInf, 
 }
 
 func ResetAllStakerValidators(ec exoclient.ExoClientInf, logger feedertypes.LoggerInf) error {
-	stakerInfos, err := ec.GetStakerInfos(fetchertypes.GetNSTAssetID(fetchertypes.NativeTokenETH))
+	stakerInfos, version, err := ec.GetStakerInfos(fetchertypes.GetNSTAssetID(fetchertypes.NativeTokenETH))
 	if err != nil {
 		return fmt.Errorf("failed to get stakerInfos for native-restaking-eth, error:%w", err)
 	}
 	if len(stakerInfos) > 0 {
-		if err := beaconchain.ResetStakerValidators(stakerInfos, true); err != nil {
+		if err := beaconchain.ResetStakerValidators(stakerInfos, version, true); err != nil {
 			return fmt.Errorf("failed to set stakerInfs for native-restaking-eth, error:%w", err)
 		}
 	}

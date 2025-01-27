@@ -18,11 +18,6 @@ import (
 	"github.com/imroc/biu"
 )
 
-type validatorList struct {
-	index      uint64
-	validators []string
-}
-
 type ResultValidators struct {
 	Data []struct {
 		Index     string `json:"index"`
@@ -72,7 +67,8 @@ var (
 	defaultStakerValidators = newStakerVList()
 
 	// latest finalized epoch we've got balances summarized for stakers
-	finalizedEpoch uint64
+	finalizedEpoch   uint64
+	finalizedVersion int64
 
 	// latest stakerBalanceChanges, initialized as 0 change (256-0 of 1st parts means that all stakers have 32 efb)
 	//	latestChangesBytes = make([]byte, 32)
@@ -82,28 +78,21 @@ var (
 	slotsPerEpoch uint64
 )
 
-func ResetStakerValidators(stakerInfos []*oracletypes.StakerInfo, all bool) error {
-	return defaultStakerValidators.reset(stakerInfos, all)
+func ResetStakerValidators(stakerInfos []*oracletypes.StakerInfo, version int64, all bool) error {
+	return defaultStakerValidators.reset(stakerInfos, version, all)
 }
-func UpdateStakerValidators(stakerIdx int, validatorIndexHex string, index uint64, deposit bool) bool {
-	validatorIndexInt, err := convertHexToIntStr(validatorIndexHex)
-	if err != nil {
-		logger.Error("failed to parse validatorIndexHex to intString")
-		return false
-	}
-	if deposit {
-		return defaultStakerValidators.addVIdx(stakerIdx, validatorIndexInt, index)
-	}
-	return defaultStakerValidators.removeVIdx(stakerIdx, validatorIndexInt, index)
+
+func UpdateStakerValidators(add, remove map[int64][]string, startVersion, endVersion int64) error {
+	return defaultStakerValidators.update(add, remove, startVersion, endVersion)
 }
 
 func (s *source) fetch(token string) (*types.PriceInfo, error) {
 	// check epoch, when epoch updated, update effective-balance
 	if types.NSTToken(token) != types.NativeTokenETH {
-		return nil, feedertypes.ErrTokenNotSupported.Wrap(fmt.Sprintf("only support native-eth-restaking %s", types.NativeTokenETH))
+		return nil, feedertypes.ErrTokenNotSupported.Wrap(fmt.Sprintf("only support native-eth-restaking %s, got:%s", types.NativeTokenETH, token))
 	}
 
-	stakerValidators := defaultStakerValidators.getStakerValidators()
+	stakerValidators, version := defaultStakerValidators.getStakerValidators()
 	if len(stakerValidators) == 0 {
 		// return zero price when there's no stakers
 		return &types.PriceInfo{}, nil
@@ -116,23 +105,24 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 	}
 
 	// epoch not updated, just return without fetching since effective-balance has not changed
-	if epoch <= finalizedEpoch {
+	if epoch <= finalizedEpoch && version <= finalizedVersion {
 		return &types.PriceInfo{
-			Price:   string(latestChangesBytes),
-			RoundID: strconv.FormatUint(finalizedEpoch, 10),
+			Price: string(latestChangesBytes),
+			// combine epoch and version as roundID in priceInfo
+			RoundID: fmt.Sprintf("%s_%s", strconv.FormatUint(finalizedEpoch, 10), strconv.FormatInt(version, 10)),
 		}, nil
 	}
 
 	stakerChanges := make([][]int, 0, len(stakerValidators))
 	s.logger.Info("fetch efb from beaconchain", "stakerList_length", len(stakerValidators))
 	hasEFBChanged := false
-	for stakerIdx, vList := range stakerValidators {
+	for stakerIdx, validators := range stakerValidators {
 		stakerBalance := 0
 		// beaconcha.in support at most 100 validators for one request
-		l := len(vList.validators)
+		l := len(validators)
 		i := 0
 		for l > 100 {
-			tmpValidatorPubkeys := vList.validators[i : i+100]
+			tmpValidatorPubkeys := validators[i : i+100]
 			i += 100
 			l -= 100
 			validatorBalances, err := getValidators(tmpValidatorPubkeys, stateRoot)
@@ -144,7 +134,7 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 			}
 		}
 
-		validatorBalances, err := getValidators(vList.validators[i:], stateRoot)
+		validatorBalances, err := getValidators(validators[i:], stateRoot)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get validators from beaconchain, error:%w", err)
 		}
@@ -156,7 +146,8 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 			if delta < maxChange*l {
 				delta = maxChange * l
 			}
-			stakerChanges = append(stakerChanges, []int{stakerIdx, delta})
+			// #nosec G155  -- safe conversion, stakerIdx has been verified to be less than 256
+			stakerChanges = append(stakerChanges, []int{int(stakerIdx), delta})
 			s.logger.Info("fetched efb from beaconchain", "staker_index", stakerIdx, "balance_change", delta, "validators_count", l)
 			hasEFBChanged = true
 		}
@@ -169,12 +160,13 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 	})
 
 	finalizedEpoch = epoch
+	finalizedVersion = version
 
 	latestChangesBytes = convertBalanceChangeToBytes(stakerChanges)
 
 	return &types.PriceInfo{
 		Price:   string(latestChangesBytes),
-		RoundID: strconv.FormatUint(finalizedEpoch, 10),
+		RoundID: fmt.Sprintf("%s_%s", strconv.FormatUint(finalizedEpoch, 10), strconv.FormatInt(version, 10)),
 	}, nil
 }
 

@@ -223,6 +223,7 @@ func (f *feeder) start() {
 				f.lastPrice.price = *(price.price)
 				// update latest height that price had been updated
 				f.lastPrice.height = price.txHeight
+				f.logger.Info("updated price", "price", price.price, "txHeight", price.txHeight)
 			case req := <-f.paramsCh:
 				if err := f.updateFeederParams(req.params); err != nil {
 					// This should not happen under this case.
@@ -400,7 +401,11 @@ func (fs *Feeders) Start() {
 							if source = fetchertypes.GetNSTSource(nstToken); len(source) == 0 {
 								fs.logger.Error("failed to add new feeder, source of nst token is not set", "token", tokenName)
 							}
+						} else if !strings.HasSuffix(tokenName, fetchertypes.BaseCurrency) {
+							// NOTE: this is for V1 only
+							tokenName += fetchertypes.BaseCurrency
 						}
+
 						feeder := newFeeder(tf, tfID, fs.fetcher, fs.submitter, source, tokenName, params.MaxNonce, fs.logger)
 						fs.feederMap[tfID] = feeder
 						feeder.start()
@@ -422,6 +427,7 @@ func (fs *Feeders) Start() {
 						fs.logger.Error("failed to get feeder by feederID when update price for feeders", "updatePriceReq", req)
 						continue
 					} else {
+						fs.logger.Info("update price for feeder", "feeder", feeder.Info(), "price", price.price, "roundID", price.roundID, "txHeight", req.txHeight)
 						feeder.updatePrice(req.txHeight, &fetchertypes.PriceInfo{
 							Price:   price.price,
 							Decimal: price.decimal,
