@@ -4,7 +4,7 @@ go 1.21.12
 
 require (
 	cosmossdk.io/simapp v0.0.0-20230608160436-666c345ad23d
-	github.com/ExocoreNetwork/exocore v1.0.9
+	github.com/ExocoreNetwork/exocore v0.0.0-20250219122426-109ab9437df8
 	github.com/cometbft/cometbft v0.37.4
 	github.com/cosmos/cosmos-sdk v0.47.8
 	github.com/cosmos/go-bip39 v1.0.0
@@ -12,7 +12,6 @@ require (
 	github.com/evmos/evmos/v16 v16.0.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0
-	// github.com/leonz789/exocore v0.0.0-20250115172527-ff4a7b602924
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4
@@ -244,8 +243,6 @@ require (
 replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
-
-	github.com/ExocoreNetwork/exocore => github.com/leonz789/exocore v0.0.0-20250115172527-ff4a7b602924
 
 	// use Cosmos-SDK fork to enable Ledger functionality
 	github.com/cosmos/cosmos-sdk => github.com/evmos/cosmos-sdk v0.47.5-evmos.2
