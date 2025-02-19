@@ -38,13 +38,75 @@ type ResultConfig struct {
 
 type stakerVList struct {
 	locker      *sync.RWMutex
-	sValidators map[int]*validatorList
+	version     int64
+	sValidators sVList
+}
+
+type sVList map[int64][]string
+
+func newSVList() sVList {
+	return make(map[int64][]string)
+}
+
+func (sv sVList) cpy() sVList {
+	ret := make(map[int64][]string)
+	for k, v := range sv {
+		sliceCpy := make([]string, len(v))
+		copy(sliceCpy, v)
+		ret[k] = sliceCpy
+	}
+	return ret
+}
+
+func (sv sVList) add(sValidators map[int64][]string) error {
+	for sIdx, validators := range sValidators {
+		if vList, ok := sv[sIdx]; ok {
+			seen := make(map[string]struct{})
+			for _, vIdx := range vList {
+				seen[vIdx] = struct{}{}
+			}
+			for _, vIdx := range validators {
+				if _, ok := seen[vIdx]; ok {
+					return fmt.Errorf("failed to do add, validatorIndex already exists, staker-index:%d, validator-index:%s", sIdx, vIdx)
+				}
+				sv[sIdx] = append(sv[sIdx], vIdx)
+				seen[vIdx] = struct{}{}
+			}
+		} else {
+			sv[sIdx] = validators
+		}
+	}
+	return nil
+}
+
+func (sv sVList) remove(sValidators map[int64][]string) error {
+	for sIdx, validators := range sValidators {
+		vList, ok := sv[sIdx]
+		if !ok {
+			return fmt.Errorf("failed to do remove, stakerIndex not found, staker-index:%d", sIdx)
+		}
+		target := make(map[string]struct{})
+		for _, v := range validators {
+			target[v] = struct{}{}
+		}
+		result := make([]string, 0, len(vList))
+		for _, v := range vList {
+			if _, ok := target[v]; !ok {
+				result = append(result, v)
+			}
+		}
+		if len(vList)-len(result) != len(validators) {
+			return fmt.Errorf("failed to remove validators, including non-existing validatorIndex to remove, staker-index:%d", sIdx)
+		}
+		sv[sIdx] = result
+	}
+	return nil
 }
 
 func newStakerVList() *stakerVList {
 	return &stakerVList{
 		locker:      new(sync.RWMutex),
-		sValidators: make(map[int]*validatorList),
+		sValidators: newSVList(),
 	}
 }
 
@@ -58,91 +120,107 @@ func (s *stakerVList) length() int {
 	return l
 }
 
-func (s *stakerVList) getStakerValidators() map[int]*validatorList {
+// func (s *stakerVList) getStakerValidators() map[int]*validatorList {
+func (s *stakerVList) getStakerValidators() (map[int64][]string, int64) {
 	s.locker.RLock()
 	defer s.locker.RUnlock()
-	ret := make(map[int]*validatorList)
-	for stakerIdx, vList := range s.sValidators {
-		validators := make([]string, len(vList.validators))
-		copy(validators, vList.validators)
-		ret[stakerIdx] = &validatorList{
-			index:      vList.index,
-			validators: validators,
-		}
-	}
-	return ret
+	ret := s.sValidators.cpy()
+	version := s.version
+	return ret, version
 }
 
-func (s *stakerVList) addVIdx(sIdx int, vIdx string, index uint64) bool {
+func (s *stakerVList) add(sValidators map[int64][]string, nextVersion, latestVersion int64) bool {
 	s.locker.Lock()
 	defer s.locker.Unlock()
-	if vList, ok := s.sValidators[sIdx]; ok {
-		if vList.index+1 != index {
-			return false
-		}
-		vList.index++
-		vList.validators = append(vList.validators, vIdx)
-	} else {
-		if index != 0 {
-			return false
-		}
-		s.sValidators[sIdx] = &validatorList{
-			index:      0,
-			validators: []string{vIdx},
-		}
+	if s.version+1 != nextVersion {
+		return false
 	}
-	return true
-}
-func (s *stakerVList) removeVIdx(sIdx int, vIdx string, index uint64) bool {
-	s.locker.RLock()
-	defer s.locker.RUnlock()
-	if vList, ok := s.sValidators[sIdx]; ok {
-		if vList.index+1 != index {
-			return false
-		}
-		vList.index++
-		for idx, v := range vList.validators {
-			if v == vIdx {
-				if len(vList.validators) == 1 {
-					delete(s.sValidators, sIdx)
-					return true
-				}
-				vList.validators = append(vList.validators[:idx], vList.validators[idx+1:]...)
-				return true
-			}
-		}
+	cpy := s.sValidators.cpy()
+	if cpy.add(sValidators) == nil {
+		s.sValidators = cpy
+		s.version = latestVersion
+		return true
 	}
 	return false
 }
 
-func (s *stakerVList) reset(stakerInfos []*oracletypes.StakerInfo, all bool) error {
-	s.locker.Lock()
-	if all {
-		s.sValidators = make(map[int]*validatorList)
+func (s *stakerVList) remove(sVList map[int64][]string, nextVersion, latestVersion int64) bool {
+	s.locker.RLock()
+	defer s.locker.RUnlock()
+	if s.version+1 != nextVersion {
+		return false
 	}
+	cpy := s.sValidators.cpy()
+	if cpy.remove(sVList) == nil {
+		s.sValidators = cpy
+		s.version = latestVersion
+		return true
+	}
+	return false
+}
+
+func (s *stakerVList) update(addList, removeList map[int64][]string, nextVersion, latestVersion int64) error {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	if s.version+1 != nextVersion {
+		return fmt.Errorf("version mismatch, current:%d, next:%d", s.version, nextVersion)
+	}
+	cpy := s.sValidators.cpy()
+	if err := cpy.add(addList); err != nil {
+		return err
+	}
+	if err := cpy.remove(removeList); err != nil {
+		return err
+	}
+
+	s.sValidators = cpy
+	s.version = latestVersion
+	return nil
+}
+
+func (s *stakerVList) reset(stakerInfos []*oracletypes.StakerInfo, version int64, all bool) error {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	if !all && s.version+1 != version {
+		return fmt.Errorf("version mismatch, current:%d, next:%d", s.version, version)
+	}
+	tmp := make(map[int64][]string)
+	seenStakerIdx := make(map[int64]struct{})
 	for _, stakerInfo := range stakerInfos {
+		if _, ok := seenStakerIdx[stakerInfo.StakerIndex]; ok {
+			return fmt.Errorf(fmt.Sprintf("duplicated stakerIndex, staker-index:%d", stakerInfo.StakerIndex))
+		}
+		// TODO: V1 support only 256 stakers at most for now(each stakers can have at most 256 beaconchain validators), grouops stakers as list of 256-length for more stakers
+		if stakerInfo.StakerIndex > 256 {
+			return fmt.Errorf(fmt.Sprintf("stakerIndex is greater than 256, staker-index:%d", stakerInfo.StakerIndex))
+		}
 		validators := make([]string, 0, len(stakerInfo.ValidatorPubkeyList))
+		seenValidatorIdx := make(map[string]struct{})
 		for _, validatorIndexHex := range stakerInfo.ValidatorPubkeyList {
+			if _, ok := seenValidatorIdx[validatorIndexHex]; ok {
+				return fmt.Errorf(fmt.Sprintf("duplicated validatorIndex, validator-index-hex:%s", validatorIndexHex))
+			}
 			validatorIdx, err := convertHexToIntStr(validatorIndexHex)
 			if err != nil {
-				logger.Error("failed to convert validatorIndex from hex string to int", "validator-index-hex", validatorIndexHex)
 				return fmt.Errorf(fmt.Sprintf("failed to convert validatorIndex from hex string to int, validator-index-hex:%s", validatorIndexHex))
 			}
 			validators = append(validators, validatorIdx)
+			seenValidatorIdx[validatorIndexHex] = struct{}{}
 		}
-
-		index := uint64(0)
-		// TODO: this may not necessary, stakerInfo should have at least one entry in balanceList
-		if l := len(stakerInfo.BalanceList); l > 0 {
-			index = stakerInfo.BalanceList[l-1].Index
-		}
-		s.sValidators[int(stakerInfo.StakerIndex)] = &validatorList{
-			index:      index,
-			validators: validators,
-		}
-
+		seenStakerIdx[stakerInfo.StakerIndex] = struct{}{}
+		tmp[stakerInfo.StakerIndex] = validators
 	}
-	s.locker.Unlock()
+	// all or zero
+	if all {
+		s.sValidators = tmp
+	} else {
+		for k, v := range tmp {
+			s.sValidators[k] = v
+		}
+	}
+
+	s.version = version
 	return nil
 }
 
@@ -247,4 +325,19 @@ func convertHexToIntStr(hexStr string) (string, error) {
 	}
 	return new(big.Int).SetBytes(vBytes).String(), nil
 
+}
+
+func ConvertHexToIntStrForMap(in map[int64][]string) (map[int64][]string, error) {
+	ret := make(map[int64][]string)
+	var err error
+	for k, v := range in {
+		ret[k] = make([]string, len(v))
+		for i, val := range v {
+			ret[k][i], err = convertHexToIntStr(val)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return ret, nil
 }

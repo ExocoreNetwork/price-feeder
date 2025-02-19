@@ -4,7 +4,7 @@ go 1.21.12
 
 require (
 	cosmossdk.io/simapp v0.0.0-20230608160436-666c345ad23d
-	github.com/ExocoreNetwork/exocore v0.0.0-20240930063211-fdf77610aa90
+	github.com/ExocoreNetwork/exocore v1.0.9
 	github.com/cometbft/cometbft v0.37.4
 	github.com/cosmos/cosmos-sdk v0.47.8
 	github.com/cosmos/go-bip39 v1.0.0
@@ -12,12 +12,17 @@ require (
 	github.com/evmos/evmos/v16 v16.0.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0
+	// github.com/leonz789/exocore v0.0.0-20250115172527-ff4a7b602924
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4
-	go.uber.org/atomic v1.10.0
 	google.golang.org/grpc v1.60.1
 	gopkg.in/yaml.v2 v2.4.0
+)
+
+require (
+	go.uber.org/zap v1.27.0
+	google.golang.org/protobuf v1.33.0
 )
 
 require (
@@ -212,7 +217,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.19.0 // indirect
 	go.opentelemetry.io/otel/trace v1.19.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/exp v0.0.0-20231214170342-aacd6d4b4611 // indirect
 	golang.org/x/mod v0.16.0 // indirect
@@ -229,7 +233,6 @@ require (
 	google.golang.org/genproto v0.0.0-20240102182953-50ed04b92917 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20231212172506-995d672761c0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240108191215-35c7eff3a6b1 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
@@ -241,6 +244,8 @@ require (
 replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
+
+	github.com/ExocoreNetwork/exocore => github.com/leonz789/exocore v0.0.0-20250115172527-ff4a7b602924
 
 	// use Cosmos-SDK fork to enable Ledger functionality
 	github.com/cosmos/cosmos-sdk => github.com/evmos/cosmos-sdk v0.47.5-evmos.2

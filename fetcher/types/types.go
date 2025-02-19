@@ -435,11 +435,12 @@ type NSTToken string
 
 const (
 	defaultPendingTokensLimit = 5
-	// defaultInterval           = 30 * time.Second
-	defaultInterval = 3 * time.Second
-	Chainlink       = "chainlink"
-	BeaconChain     = "beaconchain"
-	Solana          = "solana"
+	defaultInterval           = 30 * time.Second
+	// defaultInterval = 3 * time.Second
+	Chainlink    = "chainlink"
+	BaseCurrency = "usdt"
+	BeaconChain  = "beaconchain"
+	Solana       = "solana"
 
 	NativeTokenETH NSTToken = "nsteth"
 	NativeTokenSOL NSTToken = "nstsol"
