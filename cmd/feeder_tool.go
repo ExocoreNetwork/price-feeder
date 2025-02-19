@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"github.com/ExocoreNetwork/price-feeder/exoclient"
-	"github.com/ExocoreNetwork/price-feeder/fetcher"
-	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/cosmos/go-bip39"
+	oracleTypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	"github.com/imua-xyz/price-feeder/exoclient"
+	"github.com/imua-xyz/price-feeder/fetcher"
+	"github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 	"google.golang.org/grpc"
 )
 

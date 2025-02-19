@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"github.com/ExocoreNetwork/price-feeder/fetcher/beaconchain"
-	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
+	oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	"github.com/imua-xyz/price-feeder/fetcher/beaconchain"
+	"github.com/imua-xyz/price-feeder/fetcher/types"
 	"go.uber.org/atomic"
 )
 

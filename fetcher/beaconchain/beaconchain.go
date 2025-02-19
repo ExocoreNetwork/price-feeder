@@ -17,12 +17,12 @@ import (
 	"strconv"
 	"strings"
 
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/cometbft/cometbft/libs/sync"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/imroc/biu"
+	oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	"github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 	"gopkg.in/yaml.v2"
 )
 

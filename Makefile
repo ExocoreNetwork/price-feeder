@@ -1,4 +1,4 @@
-PACKAGE_NAME          := github.com/ExocoreNetwork/price-feeder
+PACKAGE_NAME          := github.com/imua-xyz/price-feeder
 GOLANG_CROSS_VERSION  = v1.22-v2.0.0
 GOPATH ?= '$(HOME)/go'
 

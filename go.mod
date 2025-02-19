@@ -1,10 +1,9 @@
-module github.com/ExocoreNetwork/price-feeder
+module github.com/imua-xyz/price-feeder
 
 go 1.21.12
 
 require (
 	cosmossdk.io/simapp v0.0.0-20230608160436-666c345ad23d
-	github.com/ExocoreNetwork/exocore v0.0.0-20240930063211-fdf77610aa90
 	github.com/cometbft/cometbft v0.37.4
 	github.com/cosmos/cosmos-sdk v0.47.8
 	github.com/cosmos/go-bip39 v1.0.0
@@ -12,6 +11,7 @@ require (
 	github.com/evmos/evmos/v16 v16.0.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0
+	github.com/imua-xyz/imuachain v1.0.5-0.20250219142418-31bdd2920569
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4

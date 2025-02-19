@@ -3,7 +3,7 @@ package exoclient
 import (
 	"context"
 
-	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+	oracleTypes "github.com/imua-xyz/imuachain/x/oracle/types"
 	"google.golang.org/grpc"
 )
 

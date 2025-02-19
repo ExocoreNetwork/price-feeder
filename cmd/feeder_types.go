@@ -1,6 +1,6 @@
 package cmd
 
-import oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
+import oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
 
 // Define the types for the feeder
 type feederParams struct {

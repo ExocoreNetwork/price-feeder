@@ -7,7 +7,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/ExocoreNetwork/price-feeder/types"
+	"github.com/imua-xyz/price-feeder/types"
 	"github.com/spf13/cobra"
 )
 

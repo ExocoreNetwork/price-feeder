@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ExocoreNetwork/exocore/app"
-	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
 	"github.com/evmos/evmos/v16/encoding"
+	"github.com/imua-xyz/imuachain/app"
+	oracleTypes "github.com/imua-xyz/imuachain/x/oracle/types"
 
 	cryptoed25519 "crypto/ed25519"
 
@@ -19,11 +19,11 @@ import (
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
 	"cosmossdk.io/simapp/params"
-	cmdcfg "github.com/ExocoreNetwork/exocore/cmd/config"
 	"github.com/cosmos/cosmos-sdk/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
+	cmdcfg "github.com/imua-xyz/imuachain/cmd/config"
 
 	"google.golang.org/grpc"
 )
