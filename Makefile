@@ -12,6 +12,7 @@ LDFLAGS := -X github.com/ExocoreNetwork/price-feeder/version.Version=$(VERSION) 
 
 release-dry-run:
 	docker run \
+		-e GOPROXY=https://goproxy.cn,direct \
 		--rm \
 		--privileged \
 		-e CGO_ENABLED=1 \
