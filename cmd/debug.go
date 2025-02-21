@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ExocoreNetwork/price-feeder/debugger"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	"github.com/imua-xyz/price-feeder/debugger"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -40,8 +40,8 @@ var debugStartCmd = &cobra.Command{
 
 var debugSendCmd = &cobra.Command{
 	Use:   `send --feederID [feederID] --height [height] [{"baseblock":1,"nonce":1,"price":"999","det_id":"123","decimal":8,"timestamp":"2006-01-02 15:16:17"}]`,
-	Short: "send a create-price message to exocored",
-	Long:  "Send a create-price message to exocored, the flag -h is optional. The tx will be sent immediately if that value is not set.",
+	Short: "send a create-price message to imuad",
+	Long:  "Send a create-price message to imuad, the flag -h is optional. The tx will be sent immediately if that value is not set.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		feederID, err := cmd.Parent().PersistentFlags().GetUint64(flagFeederID)
@@ -71,8 +71,8 @@ var debugSendCmd = &cobra.Command{
 
 var debugSendImmCmd = &cobra.Command{
 	Use:   `send-imm --feederID [feederID] [{"baseblock":1,"nonce":1,"price":"999","det_id":"123","decimal":8,"timestamp":"2006-01-02 15:16:17"}]`,
-	Short: "send a create-price message to exocored",
-	Long:  "Send a create-price message to exocored, the flag -h is optional. The tx will be sent immediately if that value is not set.",
+	Short: "send a create-price message to imuad",
+	Long:  "Send a create-price message to imuad, the flag -h is optional. The tx will be sent immediately if that value is not set.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		feederID, err := cmd.Parent().PersistentFlags().GetUint64(flagFeederID)

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"sync"
 
-	aggregatorv3 "github.com/ExocoreNetwork/price-feeder/fetcher/chainlink/aggregatorv3"
-	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	aggregatorv3 "github.com/imua-xyz/price-feeder/fetcher/chainlink/aggregatorv3"
+	"github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 	"gopkg.in/yaml.v2"
 )
 

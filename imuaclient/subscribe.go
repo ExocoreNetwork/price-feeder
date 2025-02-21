@@ -1,4 +1,4 @@
-package exoclient
+package imuaclient
 
 import (
 	"encoding/json"
@@ -35,7 +35,7 @@ var (
 	}
 )
 
-func (ec *exoClient) Subscribe() {
+func (ec *imuaClient) Subscribe() {
 	// set up a background routine to listen to 'stop' signal and restart all tasks
 	// we expect this rountine as a forever-running process unless failed more than maxretry times
 	// or failed to confirm all routines closed after timeout when reciving stop signal
@@ -69,7 +69,7 @@ func (ec *exoClient) Subscribe() {
 	}()
 }
 
-func (ec exoClient) EventsCh() chan EventInf {
+func (ec imuaClient) EventsCh() chan EventInf {
 	return ec.wsEventsCh
 }
 
@@ -77,7 +77,7 @@ func (ec exoClient) EventsCh() chan EventInf {
 // 1. routine: send ping message
 // 2. subscribe to events
 // 3. routine: read events from ws connection
-func (ec *exoClient) startTasks() {
+func (ec *imuaClient) startTasks() {
 	// ws connection stopped, reset subscriber
 	ec.logger.Info("establish ws connection")
 	if err := ec.connectWs(maxRetry); err != nil {
@@ -100,9 +100,9 @@ func (ec *exoClient) startTasks() {
 	ec.logger.Info("setuped all subscriber tasks successfully")
 }
 
-func (ec *exoClient) connectWs(maxRetry int) error {
+func (ec *imuaClient) connectWs(maxRetry int) error {
 	if ec.wsDialer == nil {
-		return errors.New("wsDialer not set in exoClient")
+		return errors.New("wsDialer not set in imuaClient")
 	}
 	var err error
 	count := 0
@@ -122,7 +122,7 @@ func (ec *exoClient) connectWs(maxRetry int) error {
 	return fmt.Errorf("failed to dial ws endpoint, endpoint:%s, error:%w", ec.wsEndpoint, err)
 }
 
-func (ec *exoClient) StopWsRoutines() {
+func (ec *imuaClient) StopWsRoutines() {
 	ec.wsLock.Lock()
 	select {
 	case _, ok := <-ec.wsStop:
@@ -136,7 +136,7 @@ func (ec *exoClient) StopWsRoutines() {
 	ec.wsLock.Unlock()
 }
 
-func (ec *exoClient) increaseWsRoutines() (int, bool) {
+func (ec *imuaClient) increaseWsRoutines() (int, bool) {
 	// only increase active rountine count when the wsConnection is active
 	ec.wsLock.Lock()
 	defer ec.wsLock.Unlock()
@@ -147,7 +147,7 @@ func (ec *exoClient) increaseWsRoutines() (int, bool) {
 	return *ec.wsActiveRoutines, false
 }
 
-func (ec *exoClient) decreaseWsRountines() (int, bool) {
+func (ec *imuaClient) decreaseWsRountines() (int, bool) {
 	ec.wsLock.Lock()
 	defer ec.wsLock.Unlock()
 	if ec.wsActiveRoutines != nil {
@@ -160,27 +160,27 @@ func (ec *exoClient) decreaseWsRountines() (int, bool) {
 	return *ec.wsActiveRoutines, false
 }
 
-func (ec *exoClient) isZeroWsRoutines() bool {
+func (ec *imuaClient) isZeroWsRoutines() bool {
 	ec.wsLock.Lock()
 	isZero := *ec.wsActiveRoutines == 0
 	ec.wsLock.Unlock()
 	return isZero
 }
 
-func (ec *exoClient) markWsActive() {
+func (ec *imuaClient) markWsActive() {
 	ec.wsLock.Lock()
 	*ec.wsActive = true
 	ec.wsLock.Unlock()
 
 }
 
-func (ec *exoClient) markWsInactive() {
+func (ec *imuaClient) markWsInactive() {
 	ec.wsLock.Lock()
 	*ec.wsActive = false
 	ec.wsLock.Unlock()
 }
 
-func (ec exoClient) sendAllSubscribeMsgs(maxRetry int) error {
+func (ec imuaClient) sendAllSubscribeMsgs(maxRetry int) error {
 	// at least try for one time
 	if maxRetry < 1 {
 		maxRetry = 1
@@ -210,7 +210,7 @@ func (ec exoClient) sendAllSubscribeMsgs(maxRetry int) error {
 	return nil
 }
 
-func (ec exoClient) startPingRoutine() bool {
+func (ec imuaClient) startPingRoutine() bool {
 	if _, ok := ec.increaseWsRoutines(); !ok {
 		// ws connection is not active
 		return ok
@@ -247,7 +247,7 @@ func (ec exoClient) startPingRoutine() bool {
 	return true
 }
 
-func (ec exoClient) startReadRoutine() bool {
+func (ec imuaClient) startReadRoutine() bool {
 	if _, ok := ec.increaseWsRoutines(); !ok {
 		// ws connection is not active
 		return ok
