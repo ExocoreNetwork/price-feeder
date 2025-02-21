@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 )
 
 type SourceInf interface {

@@ -6,7 +6,7 @@ package cmd
 import (
 	"os"
 
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 	"github.com/spf13/cobra"
 )
 

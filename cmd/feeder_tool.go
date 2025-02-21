@@ -6,14 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ExocoreNetwork/price-feeder/exoclient"
-	"github.com/ExocoreNetwork/price-feeder/fetcher"
-	"github.com/ExocoreNetwork/price-feeder/types"
+	"github.com/imua-xyz/price-feeder/fetcher"
+	"github.com/imua-xyz/price-feeder/imuaclient"
+	"github.com/imua-xyz/price-feeder/types"
 
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"github.com/ExocoreNetwork/price-feeder/fetcher/beaconchain"
-	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	"github.com/imua-xyz/price-feeder/fetcher/beaconchain"
+	fetchertypes "github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 )
 
 type RetryConfig struct {
@@ -29,13 +29,13 @@ var DefaultRetryConfig = RetryConfig{
 
 // var updateConfig sync.Mutex
 
-// RunPriceFeeder runs price feeder to fetching price and feed to exocorechain
+// RunPriceFeeder runs price feeder to fetching price and feed to imuachain
 func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnemonic string, sourcesPath string, standalone bool) {
 	// init logger
 	if logger = feedertypes.SetLogger(logger); logger == nil {
 		panic("logger is not initialized")
 	}
-	// init logger, fetchers, exocoreclient
+	// init logger, fetchers, imuaclient
 	if err := initComponents(logger, conf, sourcesPath, standalone); err != nil {
 		logger.Error("failed to initialize components")
 		panic(err)
@@ -49,9 +49,9 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 		panic(fmt.Sprintf("failed to start Fetcher, error:%v", err))
 	}
 
-	ecClient, _ := exoclient.GetClient()
+	ecClient, _ := imuaclient.GetClient()
 	defer ecClient.Close()
-	// initialize oracle params by querying from exocore
+	// initialize oracle params by querying from imua
 	oracleP, err := getOracleParamsWithMaxRetry(DefaultRetryConfig.MaxAttempts, ecClient, logger)
 	if err != nil {
 		panic(fmt.Sprintf("failed to get initial oracle params: %v", err))
@@ -84,7 +84,7 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 
 	for event := range ecClient.EventsCh() {
 		switch e := event.(type) {
-		case *exoclient.EventNewBlock:
+		case *imuaclient.EventNewBlock:
 			if paramsUpdate := e.ParamsUpdate(); paramsUpdate {
 				oracleP, err = getOracleParamsWithMaxRetry(DefaultRetryConfig.MaxAttempts, ecClient, logger)
 				if err != nil {
@@ -95,7 +95,7 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 				// TODO: add newly added tokenfeeders if exists
 			}
 			feeders.Trigger(e.Height(), e.FeederIDs())
-		case *exoclient.EventUpdatePrice:
+		case *imuaclient.EventUpdatePrice:
 			finalPrices := make([]*finalPrice, 0, len(e.Prices()))
 			var syncPriceInfo string
 			for _, price := range e.Prices() {
@@ -116,7 +116,7 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 			}
 			logger.Info("sync local price from event", "prices", syncPriceInfo)
 			feeders.UpdatePrice(e.TxHeight(), finalPrices)
-		case exoclient.EventUpdateNSTs:
+		case imuaclient.EventUpdateNSTs:
 			addList, removeList, nextVersion, latestVersion := e.Parse()
 			// NOTE: for v1, beaconchain only:
 			var err error
@@ -147,7 +147,7 @@ func RunPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mnem
 
 // getOracleParamsWithMaxRetry, get oracle params with max retry
 // blocked
-func getOracleParamsWithMaxRetry(maxRetry int, ecClient exoclient.ExoClientInf, logger feedertypes.LoggerInf) (oracleP *oracletypes.Params, err error) {
+func getOracleParamsWithMaxRetry(maxRetry int, ecClient imuaclient.ImuaClientInf, logger feedertypes.LoggerInf) (oracleP *oracletypes.Params, err error) {
 	if maxRetry <= 0 {
 		maxRetry = DefaultRetryConfig.MaxAttempts
 	}
@@ -162,7 +162,7 @@ func getOracleParamsWithMaxRetry(maxRetry int, ecClient exoclient.ExoClientInf, 
 	return
 }
 
-func ResetAllStakerValidators(ec exoclient.ExoClientInf, logger feedertypes.LoggerInf) error {
+func ResetAllStakerValidators(ec imuaclient.ImuaClientInf, logger feedertypes.LoggerInf) error {
 	stakerInfos, version, err := ec.GetStakerInfos(fetchertypes.GetNSTAssetID(fetchertypes.NativeTokenETH))
 	if err != nil {
 		return fmt.Errorf("failed to get stakerInfos for native-restaking-eth, error:%w", err)
@@ -175,7 +175,7 @@ func ResetAllStakerValidators(ec exoclient.ExoClientInf, logger feedertypes.Logg
 	return nil
 }
 
-// // initComponents, initialize fetcher, exoclient, it will panic if any initialization fialed
+// // initComponents, initialize fetcher, imuaclient, it will panic if any initialization fialed
 func initComponents(logger types.LoggerInf, conf *types.Config, sourcesPath string, standalone bool) error {
 	count := 0
 	for count < DefaultRetryConfig.MaxAttempts {
@@ -186,18 +186,18 @@ func initComponents(logger types.LoggerInf, conf *types.Config, sourcesPath stri
 			return fmt.Errorf("failed to init fetcher, error:%w", err)
 		}
 
-		// init exoclient
-		err = exoclient.Init(conf, mnemonic, privFile, false, standalone)
+		// init imuaclient
+		err = imuaclient.Init(conf, mnemonic, privFile, false, standalone)
 		if err != nil {
 			if errors.Is(err, feedertypes.ErrInitConnectionFail) {
 				logger.Info("retry initComponents due to connectionfailed", "count", count, "maxRetry", DefaultRetryConfig.MaxAttempts, "error", err)
 				time.Sleep(DefaultRetryConfig.Interval)
 				continue
 			}
-			return fmt.Errorf("failed to init exoclient, error;%w", err)
+			return fmt.Errorf("failed to init imuaclient, error;%w", err)
 		}
 
-		ec, _ := exoclient.GetClient()
+		ec, _ := imuaclient.GetClient()
 
 		_, err = getOracleParamsWithMaxRetry(DefaultRetryConfig.MaxAttempts, ec, logger)
 		if err != nil {

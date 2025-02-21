@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	fetchertypes "github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"

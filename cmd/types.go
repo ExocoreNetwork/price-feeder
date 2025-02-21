@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	fetchertypes "github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 )

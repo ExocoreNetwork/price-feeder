@@ -2,9 +2,9 @@
 
 # Overview
 
-The price feeder is a tool that validators use to submit oracle prices to Exocore nodes.
+The price feeder is a tool that validators use to submit oracle prices to Imua nodes.
 
-This tool fetches token prices from off-chain sources such as `CEX` and `DEX`, then submits this price information to the Exocore blockchain network as a standard Cosmos SDK transaction. Once the submitted prices from validators reach the voting power threshold, they achieve consensus on-chain and become the final price.
+This tool fetches token prices from off-chain sources such as `CEX` and `DEX`, then submits this price information to the Imua blockchain network as a standard Cosmos SDK transaction. Once the submitted prices from validators reach the voting power threshold, they achieve consensus on-chain and become the final price.
 
 ## Workflow
 
@@ -14,7 +14,7 @@ This tool fetches token prices from off-chain sources such as `CEX` and `DEX`, t
 
 # Installation
 
-`make install` 
+`make install`
 
 Or check out the latest release.
 
@@ -22,9 +22,9 @@ Or check out the latest release.
 ## Start
 `pricefeeder --config path/to/config --sources path/to/sources/config start -m [mnemonic of validator's consensus key]`
 
-This command starts a process that continuously fetches price information from sources. It monitors the height changes of exocorechain and sends price quote transactions to the exocore blockchain during quote windows, according to the oracle parameter settings.
+This command starts a process that continuously fetches price information from sources. It monitors the height changes of imuachain and sends price quote transactions to the imua blockchain during quote windows, according to the oracle parameter settings.
 
-### Sample Config 
+### Sample Config
 #### config.yaml (path/to/config/config.yaml)
 ```
 tokens:
@@ -36,10 +36,10 @@ tokens:
     sources: source1, source2, source3
 sender:
   mnemonic: "wonder myself quality resource ketchup occur stadium shove vicious situate plug second soccer monkey harbor output vanish then primary feed earth story real like"
-  path: /Users/xx/.tmp-exocored/config
-exocore:
-  chainid: exocoretestnet_233-1
-  appName: exocore
+  path: /Users/xx/.tmp-imuad/config
+imua:
+  chainid: imuatestnet_233-1
+  appName: imua
   grpc: 127.0.0.1:9090
   ws: !!str ws://127.0.0.1:26657/websocket
   rpc: !!str http://127.0.0.1:26657
@@ -78,7 +78,7 @@ We provide command-line tools for sending price quote transactions manually thro
 ### send tx on specified height
 `pricefeeder --config path/to/config debug`
 
-This will start a grpc service to monitor the heighs change of exocorchain, and serves the 'send create-price tx' request
+This will start a grpc service to monitor the heighs change of imuachain, and serves the 'send create-price tx' request
 
 `pricefeeder --config path/to/config debug send --feederID [1] --height [160] '{"base_block":160,"nonce":2,"price":"99907000000","det_id":"123","decimal":8,"timestamp":"2024-12-27 15:16:17"}'`
 

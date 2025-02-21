@@ -8,8 +8,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	"github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 )
 
 const (

@@ -1,4 +1,4 @@
-package exoclient
+package imuaclient
 
 import (
 	"errors"
@@ -9,21 +9,21 @@ import (
 	"sync"
 
 	"cosmossdk.io/simapp/params"
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cosmos/cosmos-sdk/client"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/types/tx"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/gorilla/websocket"
+	oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 	"google.golang.org/grpc"
 )
 
-var _ ExoClientInf = &exoClient{}
+var _ ImuaClientInf = &imuaClient{}
 
-// exoClient implements exoClientInf interface to serve as a grpc client to interact with eoxored grpc service
-type exoClient struct {
+// imuaClient implements imuaClientInf interface to serve as a grpc client to interact with eoxored grpc service
+type imuaClient struct {
 	logger   feedertypes.LoggerInf
 	grpcConn *grpc.ClientConn
 
@@ -38,7 +38,7 @@ type exoClient struct {
 	txClient      tx.ServiceClient
 	txClientDebug *rpchttp.HTTP
 
-	// wsclient interact with exocored
+	// wsclient interact with imuad
 	wsClient   *websocket.Conn
 	wsEndpoint string
 	wsDialer   *websocket.Dialer
@@ -52,13 +52,13 @@ type exoClient struct {
 	// wsEventsCh       chan EventRes
 	wsEventsCh chan EventInf
 
-	// client to query from exocored
+	// client to query from imuad
 	oracleClient oracletypes.QueryClient
 }
 
-// NewExoClient creates a exocore-client used to do queries and send transactions to exocored
-func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint, endpointDebug string, privKey cryptotypes.PrivKey, encCfg params.EncodingConfig, chainID string, txOnly bool) (*exoClient, error) {
-	ec := &exoClient{
+// NewImuaClient creates a imua-client used to do queries and send transactions to imuad
+func NewImuaClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint, endpointDebug string, privKey cryptotypes.PrivKey, encCfg params.EncodingConfig, chainID string, txOnly bool) (*imuaClient, error) {
+	ec := &imuaClient{
 		logger:           logger,
 		privKey:          privKey,
 		pubKey:           privKey.PubKey(),
@@ -87,7 +87,7 @@ func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint, endpointDe
 		ec.logger.Info("establish grpc connection")
 		ec.grpcConn, err = createGrpcConn(endpoint, encCfg)
 		if err != nil {
-			return nil, feedertypes.ErrInitConnectionFail.Wrap(fmt.Sprintf("failed to create new Exoclient, endpoint:%s, error:%v", endpoint, err))
+			return nil, feedertypes.ErrInitConnectionFail.Wrap(fmt.Sprintf("failed to create new Imuaclient, endpoint:%s, error:%v", endpoint, err))
 		}
 
 		// setup txClient
@@ -109,17 +109,17 @@ func NewExoClient(logger feedertypes.LoggerInf, endpoint, wsEndpoint, endpointDe
 	return ec, nil
 }
 
-func (ec *exoClient) Close() {
+func (ec *imuaClient) Close() {
 	ec.CloseWs()
 	ec.CloseGRPC()
 }
 
 // Close close grpc connection
-func (ec *exoClient) CloseGRPC() {
+func (ec *imuaClient) CloseGRPC() {
 	ec.grpcConn.Close()
 }
 
-func (ec *exoClient) CloseWs() {
+func (ec *imuaClient) CloseWs() {
 	if ec.wsClient == nil {
 		return
 	}
@@ -127,10 +127,10 @@ func (ec *exoClient) CloseWs() {
 	ec.wsClient.Close()
 }
 
-// GetClient returns defaultExoClient and a bool value to tell if that defaultExoClient has been initialized
-func GetClient() (*exoClient, bool) {
-	if defaultExoClient == nil {
+// GetClient returns defaultImuaClient and a bool value to tell if that defaultImuaClient has been initialized
+func GetClient() (*imuaClient, bool) {
+	if defaultImuaClient == nil {
 		return nil, false
 	}
-	return defaultExoClient, true
+	return defaultImuaClient, true
 }

@@ -1,4 +1,4 @@
-package exoclient
+package imuaclient
 
 import (
 	cryptoed25519 "crypto/ed25519"
@@ -11,21 +11,21 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ExocoreNetwork/exocore/app"
-	cmdcfg "github.com/ExocoreNetwork/exocore/cmd/config"
-	oracleTypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/go-bip39"
 	"github.com/evmos/evmos/v16/encoding"
+	"github.com/imua-xyz/imuachain/app"
+	cmdcfg "github.com/imua-xyz/imuachain/cmd/config"
+	oracleTypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	fetchertypes "github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 )
 
-type ExoClientInf interface {
+type ImuaClientInf interface {
 	// Query
 	GetParams() (*oracletypes.Params, error)
 	GetLatestPrice(tokenID uint64) (oracletypes.PriceTimeRound, error)
@@ -385,23 +385,23 @@ var (
 
 	blockMaxGas uint64
 
-	defaultExoClient *exoClient
+	defaultImuaClient *imuaClient
 )
 
-// Init intialize the exoclient with configuration including consensuskey info, chainID
+// Init intialize the imuaclient with configuration including consensuskey info, chainID
 // func Init(conf feedertypes.Config, mnemonic, privFile string, standalone bool) (*grpc.ClientConn, func(), error) {
 func Init(conf *feedertypes.Config, mnemonic, privFile string, txOnly bool, standalone bool) error {
-	if logger = feedertypes.GetLogger("exoclient"); logger == nil {
+	if logger = feedertypes.GetLogger("imuaclient"); logger == nil {
 		panic("logger is not initialized")
 	}
 
-	// set prefixs to exocore when start as standlone mode
+	// set prefixs to imua when start as standlone mode
 	if standalone {
 		config := sdk.GetConfig()
 		cmdcfg.SetBech32Prefixes(config)
 	}
 
-	confExocore := conf.Exocore
+	confImua := conf.Imua
 	confSender := conf.Sender
 	privBase64 := ""
 
@@ -444,16 +444,16 @@ func Init(conf *feedertypes.Config, mnemonic, privFile string, txOnly bool, stan
 
 	encCfg := encoding.MakeConfig(app.ModuleBasics)
 
-	if len(confExocore.ChainID) == 0 {
+	if len(confImua.ChainID) == 0 {
 		return feedertypes.ErrInitFail.Wrap(fmt.Sprintf("ChainID must be specified in config"))
 	}
 
 	var err error
-	if defaultExoClient, err = NewExoClient(logger, confExocore.Grpc, confExocore.Ws, conf.Exocore.Rpc, privKey, encCfg, confExocore.ChainID, txOnly); err != nil {
+	if defaultImuaClient, err = NewImuaClient(logger, confImua.Grpc, confImua.Ws, conf.Imua.Rpc, privKey, encCfg, confImua.ChainID, txOnly); err != nil {
 		if errors.Is(err, feedertypes.ErrInitConnectionFail) {
 			return err
 		}
-		return feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to NewExoClient, privKey:%v, chainID:%s, error:%v", privKey, confExocore.ChainID, err))
+		return feedertypes.ErrInitFail.Wrap(fmt.Sprintf("failed to NewImuaClient, privKey:%v, chainID:%s, error:%v", privKey, confImua.ChainID, err))
 	}
 
 	return nil

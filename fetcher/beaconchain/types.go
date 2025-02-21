@@ -12,12 +12,12 @@ import (
 	"strconv"
 	"strings"
 
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/cometbft/cometbft/libs/sync"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	"github.com/imua-xyz/price-feeder/fetcher/types"
+	fetchertypes "github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 	"gopkg.in/yaml.v2"
 )
 
@@ -300,7 +300,7 @@ func initBeaconchain(cfgPath string, l feedertypes.LoggerInf) (types.SourceInf, 
 
 	// initialize native-restaking stakers' beaconchain-validator list
 
-	// update nst assetID to be consistent with exocored. for beaconchain it's about different lzID
+	// update nst assetID to be consistent with imuad. for beaconchain it's about different lzID
 	types.SetNativeAssetID(fetchertypes.NativeTokenETH, cfg.NSTID)
 
 	return defaultSource, nil

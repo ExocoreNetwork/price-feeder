@@ -12,10 +12,10 @@ import (
 	"strconv"
 	"strings"
 
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	"github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
 	"github.com/imroc/biu"
+	oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	"github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 )
 
 type ResultValidators struct {
@@ -139,7 +139,7 @@ func (s *source) fetch(token string) (*types.PriceInfo, error) {
 			return nil, fmt.Errorf("failed to get validators from beaconchain, error:%w", err)
 		}
 		for _, validatorBalance := range validatorBalances {
-			// this should be initialized from exocored
+			// this should be initialized from imuad
 			stakerBalance += int(validatorBalance[1])
 		}
 		if delta := stakerBalance - defaultBalance*l; delta != 0 {

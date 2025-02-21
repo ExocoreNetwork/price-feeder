@@ -1,4 +1,4 @@
-package exoclient
+package imuaclient
 
 import (
 	"context"
