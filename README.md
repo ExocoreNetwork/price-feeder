@@ -38,7 +38,7 @@ sender:
   mnemonic: "wonder myself quality resource ketchup occur stadium shove vicious situate plug second soccer monkey harbor output vanish then primary feed earth story real like"
   path: /Users/xx/.tmp-imuad/config
 imua:
-  chainid: imuatestnet_233-1
+  chainid: imuachaintestnet_233-1
   appName: imua
   grpc: 127.0.0.1:9090
   ws: !!str ws://127.0.0.1:26657/websocket
