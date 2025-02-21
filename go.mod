@@ -11,7 +11,7 @@ require (
 	github.com/evmos/evmos/v16 v16.0.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0
-	github.com/imua-xyz/imuachain v0.0.0-20250219122426-109ab9437df8
+	github.com/imua-xyz/imuachain v0.0.0-20250221095538-9f51483a7966
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4
