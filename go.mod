@@ -1,10 +1,9 @@
-module github.com/ExocoreNetwork/price-feeder
+module github.com/imua-xyz/price-feeder
 
 go 1.21.12
 
 require (
 	cosmossdk.io/simapp v0.0.0-20230608160436-666c345ad23d
-	github.com/ExocoreNetwork/exocore v0.0.0-20250219122426-109ab9437df8
 	github.com/cometbft/cometbft v0.37.4
 	github.com/cosmos/cosmos-sdk v0.47.8
 	github.com/cosmos/go-bip39 v1.0.0
@@ -12,6 +11,7 @@ require (
 	github.com/evmos/evmos/v16 v16.0.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0
+	github.com/imua-xyz/imuachain v0.0.0-20250221095538-9f51483a7966
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4
@@ -250,8 +250,8 @@ replace (
 	github.com/cosmos/gogoproto => github.com/cosmos/gogoproto v1.4.10
 	// use Evmos geth fork
 	github.com/ethereum/go-ethereum => github.com/evmos/go-ethereum v1.10.26-evmos-rc2
-	// use exocore fork of evmos
-	github.com/evmos/evmos/v16 => github.com/ExocoreNetwork/evmos/v16 v16.0.3-0.20240828081344-d5cfcd34a812
+	// use imua fork of evmos
+	github.com/evmos/evmos/v16 => github.com/imua-xyz/evmos/v16 v16.0.3-0.20240828081344-d5cfcd34a812
 	// Security Advisory https://github.com/advisories/GHSA-h395-qcrw-5vmq
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.9.1
 	// replace broken goleveldb

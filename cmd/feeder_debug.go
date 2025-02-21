@@ -7,10 +7,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/ExocoreNetwork/price-feeder/debugger"
-	"github.com/ExocoreNetwork/price-feeder/exoclient"
-	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	"github.com/imua-xyz/price-feeder/debugger"
+	fetchertypes "github.com/imua-xyz/price-feeder/fetcher/types"
+	"github.com/imua-xyz/price-feeder/imuaclient"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -116,23 +116,23 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 	if logger = feedertypes.SetLogger(logger); logger == nil {
 		panic("logger is not initialized")
 	}
-	// init exoclient
+	// init imuaclient
 	// 1. subscribing for heights
 	// 2. sending create-price tx
 	count := 0
 	for count < DebugRetryConfig.MaxAttempts {
-		if err := exoclient.Init(conf, mnemonic, privFile, false, true); err != nil {
+		if err := imuaclient.Init(conf, mnemonic, privFile, false, true); err != nil {
 			if errors.Is(err, feedertypes.ErrInitConnectionFail) {
 				logger.Info("retry initComponents due to connectionfailed", "count", count, "maxRetry", DefaultRetryConfig.MaxAttempts, "error", err)
 				time.Sleep(DebugRetryConfig.Interval)
 				continue
 			}
-			logger.Error("failed to init exoclient", "error", err)
+			logger.Error("failed to init imuaclient", "error", err)
 			return
 		}
 		break
 	}
-	ec, _ := exoclient.GetClient()
+	ec, _ := imuaclient.GetClient()
 
 	_, err := getOracleParamsWithMaxRetry(DebugRetryConfig.MaxAttempts, ec, logger)
 	if err != nil {
@@ -140,7 +140,7 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 		return
 	}
 	logger.Info("subscribe block heights...")
-	ecClient, _ := exoclient.GetClient()
+	ecClient, _ := imuaclient.GetClient()
 	defer ecClient.Close()
 	ecClient.Subscribe()
 	//	var pendingReq *sendReq
@@ -151,7 +151,7 @@ func DebugPriceFeeder(conf *feedertypes.Config, logger feedertypes.LoggerInf, mn
 		for {
 			select {
 			case event := <-ecClient.EventsCh():
-				if e, ok := event.(*exoclient.EventNewBlock); ok {
+				if e, ok := event.(*imuaclient.EventNewBlock); ok {
 					logger.Info("new block commited", "height", e.Height())
 
 					pendingReqs.process(e.Height(), func(req *sendReq) error {
@@ -210,10 +210,10 @@ func sendTx(feederID uint64, height int64, price *debugger.PriceMsg, port string
 }
 
 func sendTxImmediately(feederID uint64, price *PriceJSON) (*debugger.SubmitPriceResponse, error) {
-	if err := exoclient.Init(feederConfig, mnemonic, privFile, true, true); err != nil {
-		return nil, fmt.Errorf("failed to init exoclient in txOnly mode for debug, error:%w", err)
+	if err := imuaclient.Init(feederConfig, mnemonic, privFile, true, true); err != nil {
+		return nil, fmt.Errorf("failed to init imuaclient in txOnly mode for debug, error:%w", err)
 	}
-	ec, _ := exoclient.GetClient()
+	ec, _ := imuaclient.GetClient()
 	pInfo := price.getPriceInfo()
 
 	res, err := ec.SendTxDebug(feederID, price.BaseBlock, pInfo, price.Nonce)

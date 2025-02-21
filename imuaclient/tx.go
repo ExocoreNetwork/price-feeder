@@ -1,13 +1,13 @@
-package exoclient
+package imuaclient
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	oracletypes "github.com/ExocoreNetwork/exocore/x/oracle/types"
-	fetchertypes "github.com/ExocoreNetwork/price-feeder/fetcher/types"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	oracletypes "github.com/imua-xyz/imuachain/x/oracle/types"
+	fetchertypes "github.com/imua-xyz/price-feeder/fetcher/types"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 
@@ -17,8 +17,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 )
 
-// SendTx signs a create-price transaction and send it to exocored
-func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*sdktx.BroadcastTxResponse, error) {
+// SendTx signs a create-price transaction and send it to imuad
+func (ec imuaClient) SendTx(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*sdktx.BroadcastTxResponse, error) {
 	msg, txBytes, err := ec.getSignedTxBytes(feederID, baseBlock, price, nonce)
 	if err != nil {
 		return nil, err
@@ -37,7 +37,7 @@ func (ec exoClient) SendTx(feederID uint64, baseBlock uint64, price fetchertypes
 	return res, nil
 }
 
-func (ec exoClient) SendTxDebug(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*coretypes.ResultBroadcastTxCommit, error) {
+func (ec imuaClient) SendTxDebug(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*coretypes.ResultBroadcastTxCommit, error) {
 	msg, txBytes, err := ec.getSignedTxBytes(feederID, baseBlock, price, nonce)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (ec exoClient) SendTxDebug(feederID uint64, baseBlock uint64, price fetcher
 }
 
 // signMsg signs the message with consensusskey
-func (ec exoClient) signMsg(msgs ...sdk.Msg) (authsigning.Tx, error) {
+func (ec imuaClient) signMsg(msgs ...sdk.Msg) (authsigning.Tx, error) {
 	txBuilder := ec.txCfg.NewTxBuilder()
 	_ = txBuilder.SetMsgs(msgs...)
 	txBuilder.SetGasLimit(blockMaxGas)
@@ -77,7 +77,7 @@ func (ec exoClient) signMsg(msgs ...sdk.Msg) (authsigning.Tx, error) {
 }
 
 // getSignBytes reteive the bytes from tx for signing
-func (ec exoClient) getSignBytes(tx authsigning.Tx) ([]byte, error) {
+func (ec imuaClient) getSignBytes(tx authsigning.Tx) ([]byte, error) {
 	b, err := ec.txCfg.SignModeHandler().GetSignBytes(
 		ec.txCfg.SignModeHandler().DefaultMode(),
 		authsigning.SignerData{
@@ -93,7 +93,7 @@ func (ec exoClient) getSignBytes(tx authsigning.Tx) ([]byte, error) {
 }
 
 // getSignature assembles a siging.SignatureV2 structure
-func (ec exoClient) getSignature(sigBytes []byte) signing.SignatureV2 {
+func (ec imuaClient) getSignature(sigBytes []byte) signing.SignatureV2 {
 	signature := signing.SignatureV2{
 		PubKey: ec.pubKey,
 		Data: &signing.SingleSignatureData{
@@ -104,7 +104,7 @@ func (ec exoClient) getSignature(sigBytes []byte) signing.SignatureV2 {
 	return signature
 }
 
-func (ec exoClient) getSignedTxBytes(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*oracletypes.MsgCreatePrice, []byte, error) {
+func (ec imuaClient) getSignedTxBytes(feederID uint64, baseBlock uint64, price fetchertypes.PriceInfo, nonce int32) (*oracletypes.MsgCreatePrice, []byte, error) {
 	// build create-price message
 	msg := oracletypes.NewMsgCreatePrice(
 		sdk.AccAddress(ec.pubKey.Address()).String(),

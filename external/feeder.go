@@ -1,8 +1,8 @@
 package external
 
 import (
-	"github.com/ExocoreNetwork/price-feeder/cmd"
-	feedertypes "github.com/ExocoreNetwork/price-feeder/types"
+	"github.com/imua-xyz/price-feeder/cmd"
+	feedertypes "github.com/imua-xyz/price-feeder/types"
 )
 
 // LoadConf set conf from invoker instead of rootCmd

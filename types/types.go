@@ -11,9 +11,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// TODO: define the interface of fetchertypes.PriceInfo, for fetcher,exocclient to referenced
-// PriceInfoInf defines the core structure which has the value/data that is fetched from out-exocore-chain source
-// and submit to exocore-chain
+// TODO: define the interface of fetchertypes.PriceInfo, for fetcher, imuaclient to referenced
+// PriceInfoInf defines the core structure which has the value/data that is fetched from out-imua-chain source
+// and submit to imua-chain
 // type PriceInfoInf interface {
 // 	SetPrice()
 // 	SetDecimal()
@@ -44,13 +44,13 @@ type Config struct {
 		Mnemonic string `mapstructure:"mnemonic"`
 		Path     string `mapstructure:"path"`
 	} `mapstructure:"sender"`
-	Exocore struct {
+	Imua struct {
 		ChainID string `mapstructure:"chainid"`
 		AppName string `mapstructure:"appname"`
 		Grpc    string `mapstructure:"grpc"`
 		Ws      string `mapstructure:"ws"`
 		Rpc     string `mapstructure:"rpc"`
-	} `mapstructure:"exocore"`
+	} `mapstructure:"imua"`
 	Debugger struct {
 		Grpc string `mapstructure:"grpc"`
 	} `mapstructure:"debugger"`

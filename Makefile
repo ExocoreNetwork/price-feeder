@@ -1,4 +1,4 @@
-PACKAGE_NAME          := github.com/ExocoreNetwork/price-feeder
+PACKAGE_NAME          := github.com/imua-xyz/price-feeder
 GOLANG_CROSS_VERSION  = v1.22-v2.0.0
 GOPATH ?= '$(HOME)/go'
 
@@ -6,9 +6,9 @@ VERSION  := $(shell git describe --tags 2>/dev/null || echo "v0.0.0-unknown")
 COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-LDFLAGS := -X github.com/ExocoreNetwork/price-feeder/version.Version=$(VERSION) \
-           -X github.com/ExocoreNetwork/price-feeder/version.Commit=$(COMMIT) \
-           -X github.com/ExocoreNetwork/price-feeder/version.BuildDate=$(BUILD_DATE)
+LDFLAGS := -X github.com/imua-xyz/price-feeder/version.Version=$(VERSION) \
+           -X github.com/imua-xyz/price-feeder/version.Commit=$(COMMIT) \
+           -X github.com/imua-xyz/price-feeder/version.BuildDate=$(BUILD_DATE)
 
 release-dry-run:
 	docker run \

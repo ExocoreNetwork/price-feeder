@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/ExocoreNetwork/price-feeder/version"
+	"github.com/imua-xyz/price-feeder/version"
 	"github.com/spf13/cobra"
 )
 
