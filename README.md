@@ -20,7 +20,7 @@ Or check out the latest release.
 
 # Quick Start
 ## Start
-`pricefeeder --config path/to/config --sources path/to/sources/config start -m [mnemonic of validator's consensus key]`
+`pricefeeder --config path/to/config/config.yaml --sources path/to/sources/config start -m [mnemonic of validator's consensus key]`
 
 This command starts a process that continuously fetches price information from sources. It monitors the height changes of imuachain and sends price quote transactions to the imua blockchain during quote windows, according to the oracle parameter settings.
 
