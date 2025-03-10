@@ -254,6 +254,8 @@ replace (
 	github.com/evmos/evmos/v16 => github.com/imua-xyz/evmos/v16 v16.0.3-0.20240828081344-d5cfcd34a812
 	// Security Advisory https://github.com/advisories/GHSA-h395-qcrw-5vmq
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.9.1
+
+	github.com/imua-xyz/imuachain v0.0.0-20250221095538-9f51483a7966 => github.com/leonz789/exocore v0.0.0-20250307025632-f7a3e0deb73a
 	// replace broken goleveldb
 	github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	//fix cosmos-sdk error

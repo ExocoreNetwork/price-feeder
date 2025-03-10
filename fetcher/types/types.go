@@ -59,6 +59,7 @@ type PriceInfo struct {
 	Decimal   int32
 	Timestamp string
 	RoundID   string
+	// TODO(leonz): add a field as DetID
 }
 
 type PriceSync struct {
@@ -241,7 +242,7 @@ func (s *Source) InitTokens(tokens []string) bool {
 	s.locker.Lock()
 	defer s.locker.Unlock()
 	if s.running {
-		s.logger.Info("failed to add a token to the running source")
+		s.logger.Info("failed to add a token with 'InitTokens' for the running source, use 'addTokenAndStart' instead")
 		return false
 	}
 	// reset all tokens
@@ -459,8 +460,8 @@ var (
 	}
 
 	NSTTokens = map[NSTToken]struct{}{
-		NativeTokenETH: struct{}{},
-		NativeTokenSOL: struct{}{},
+		NativeTokenETH: {},
+		NativeTokenSOL: {},
 	}
 	NSTAssetIDMap = make(map[NSTToken]string)
 	NSTSourceMap  = map[NSTToken]string{

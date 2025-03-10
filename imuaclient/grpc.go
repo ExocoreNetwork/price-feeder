@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
-// CreateGrpcConn creates an grpc connection to the target
+// createGrpcConn creates an grpc connection to the target
 func createGrpcConn(target string, encCfg params.EncodingConfig) (conn *grpc.ClientConn, err error) {
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 

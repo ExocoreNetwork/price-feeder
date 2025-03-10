@@ -23,6 +23,7 @@ import (
 
 type source struct {
 	logger feedertypes.LoggerInf
+	m      *oracletypes.MerkleTree
 	*types.Source
 }
 type config struct {
@@ -291,7 +292,7 @@ func initBeaconchain(cfgPath string, l feedertypes.LoggerInf) (types.SourceInf, 
 		}
 	}
 
-	// init first to get a fixed point for 'fetch' to refer to
+	// init first to get a fixed pointer for 'fetch' to refer to
 	defaultSource = &source{}
 	*defaultSource = source{
 		logger: logger,
